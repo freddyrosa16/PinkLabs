@@ -1,35 +1,14 @@
 import { useLayoutEffect, useRef } from "react";
 import {
   ArrowUpIcon,
-  ChecklistIcon,
-  CodeIcon,
   DeviceDesktopIcon,
   FileDirectoryIcon,
-  LightBulbIcon,
   SquareIcon,
 } from "@primer/octicons-react";
 import { ComposerPicker } from "./ComposerPicker";
 import { providers, ProviderIcon } from "./providers";
 import type { Project } from "./store";
 import type { Provider } from "./types";
-
-const starters = [
-  {
-    label: "Plan a task",
-    prompt: "Help me plan my agent’s first task.",
-    icon: ChecklistIcon,
-  },
-  {
-    label: "Explore an idea",
-    prompt: "Help me think through an app idea.",
-    icon: LightBulbIcon,
-  },
-  {
-    label: "Explain some code",
-    prompt: "Help me understand a Python concept, one step at a time.",
-    icon: CodeIcon,
-  },
-];
 
 export function ChatComposer({
   draft,
@@ -86,23 +65,6 @@ export function ChatComposer({
 
   return (
     <div className="composer-area">
-      {!locked && (
-        <div className="suggestions" aria-label="Ideas to get started">
-          {starters.map(({ label, prompt, icon: Icon }) => (
-            <button
-              type="button"
-              key={label}
-              onClick={() => {
-                setDraft(prompt);
-                input.current?.focus({ preventScroll: true });
-              }}
-            >
-              <Icon size={16} />
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
       <div className="composer-context">
         <ComposerPicker
           label="Conversation project"

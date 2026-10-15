@@ -590,58 +590,57 @@ export function App() {
             <header className="topbar chat-topbar">
               {session && <span className="view-title">{session.title}</span>}
             </header>
-            <div className="chat-area">
-              {!session ? (
-                <div className="chat-welcome">
-                  <span className="welcome-mark" aria-hidden="true">
-                    P<span>·</span>
-                  </span>
-                  <h1>
-                    {chatProject
-                      ? `What should we build in ${chatProject.name}?`
-                      : "What would you like to build?"}
-                  </h1>
-                </div>
-              ) : (
-                <div className="messages">
-                  {session.messages.map((m) => (
-                    <div className={`message ${m.role}`} key={m.id}>
-                      {m.role === "assistant" && (
-                        <ProviderIcon provider={session.provider} />
-                      )}
-                      <div>
-                        <span className="message-label">
-                          {m.role === "user" ? "You" : "Practice assistant"}
-                        </span>
-                        <p>{m.text}</p>
+            <div className={`chat-workspace${session ? "" : " is-new"}`}>
+              <div className="chat-area">
+                {!session ? (
+                  <div className="chat-welcome">
+                    <h1>
+                      {chatProject
+                        ? `What should we build in ${chatProject.name}?`
+                        : "What would you like to build?"}
+                    </h1>
+                  </div>
+                ) : (
+                  <div className="messages">
+                    {session.messages.map((m) => (
+                      <div className={`message ${m.role}`} key={m.id}>
+                        {m.role === "assistant" && (
+                          <ProviderIcon provider={session.provider} />
+                        )}
+                        <div>
+                          <span className="message-label">
+                            {m.role === "user" ? "You" : "Practice assistant"}
+                          </span>
+                          <p>{m.text}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {running === session.id && (
-                    <div className="message assistant">
-                      <ProviderIcon provider={session.provider} />
-                      <span className="shimmer" role="status">
-                        Working on your practice reply…
-                      </span>
-                    </div>
-                  )}
-                  <div ref={messageEnd} />
-                </div>
-              )}
+                    ))}
+                    {running === session.id && (
+                      <div className="message assistant">
+                        <ProviderIcon provider={session.provider} />
+                        <span className="shimmer" role="status">
+                          Working on your practice reply…
+                        </span>
+                      </div>
+                    )}
+                    <div ref={messageEnd} />
+                  </div>
+                )}
+              </div>
+              <ChatComposer
+                draft={draft}
+                setDraft={setDraft}
+                provider={session?.provider || provider}
+                setProvider={setProvider}
+                projectId={session ? session.projectId || "" : projectId}
+                setProjectId={setProjectId}
+                projects={workspace.projects}
+                locked={!!session}
+                running={!!running}
+                submit={submit}
+                stop={stop}
+              />
             </div>
-            <ChatComposer
-              draft={draft}
-              setDraft={setDraft}
-              provider={session?.provider || provider}
-              setProvider={setProvider}
-              projectId={session ? session.projectId || "" : projectId}
-              setProjectId={setProjectId}
-              projects={workspace.projects}
-              locked={!!session}
-              running={!!running}
-              submit={submit}
-              stop={stop}
-            />
           </>
         ) : view === "agents" ? (
           <>
