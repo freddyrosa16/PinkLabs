@@ -13,6 +13,9 @@ import type {
   PullRequestFiles,
   DeletePullRequestBranchInput,
   DeletePullRequestBranchResult,
+  PullRequestComments,
+  PullRequestComment,
+  CreatePullRequestCommentInput,
 } from "./types";
 const pendingRepositories = new Map<string, Promise<Repository>>();
 async function get<T>(path: string, options?: RequestInit): Promise<T> {
@@ -35,6 +38,24 @@ export const api = {
       : get<PullRequestFiles>(
           `/api/pull-files?${new URLSearchParams({ repo, number: String(number), sha })}`,
         ),
+  getPullRequestComments: (repo: string, number: number) =>
+    window.pink
+      ? window.pink.getPullRequestComments(repo, number)
+      : get<PullRequestComments>(
+          `/api/pull-comments?${new URLSearchParams({ repo, number: String(number) })}`,
+        ),
+  createPullRequestComment: (
+    repo: string,
+    number: number,
+    input: CreatePullRequestCommentInput,
+  ) =>
+    window.pink
+      ? window.pink.createPullRequestComment(repo, number, input)
+      : get<PullRequestComment>("/api/pull-comments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo, number, ...input }),
+        }),
   deletePullRequestBranch: (
     repo: string,
     number: number,

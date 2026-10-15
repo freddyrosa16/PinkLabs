@@ -9,6 +9,7 @@ import {
   validateCommitSHA,
   validatePullRequestState,
   validateDeleteBranchInput,
+  validatePullRequestCommentInput,
 } from "./validation.mjs";
 
 const run = promisify(execFile);
@@ -148,6 +149,40 @@ const pullRequest = (pull) => ({
   branch: pull.head?.ref || "",
 });
 
+function pullComment(value, kind) {
+  const date = kind === "review" ? value?.submitted_at : value?.created_at;
+  if (
+    !Number.isSafeInteger(value?.id) ||
+    value.id <= 0 ||
+    typeof date !== "string" ||
+    !Number.isFinite(Date.parse(date)) ||
+    (kind === "review" && (typeof value.state !== "string" || !value.state))
+  )
+    throw new Error("Incomplete conversation response");
+  const result = {
+    id: `${kind}:${value.id}`,
+    kind,
+    body: typeof value.body === "string" ? value.body : "",
+    author: person(value.user),
+    date,
+    updatedAt: typeof value.updated_at === "string" ? value.updated_at : date,
+    url: value.html_url || "",
+  };
+  if (kind === "review") result.reviewState = value.state.toUpperCase();
+  if (kind === "inline") {
+    result.path = typeof value.path === "string" ? value.path : "";
+    // Outdated comments can have no current line. Do not relabel original_line
+    // as a line in the current file; the GitHub URL retains that older context.
+    result.line =
+      Number.isSafeInteger(value.line) && value.line > 0 ? value.line : null;
+    result.replyTo =
+      Number.isSafeInteger(value.in_reply_to_id) && value.in_reply_to_id > 0
+        ? value.in_reply_to_id
+        : null;
+  }
+  return result;
+}
+
 function mergeStatuses(statuses) {
   if (statuses.includes("failure")) return "failure";
   if (statuses.includes("pending")) return "pending";
@@ -202,6 +237,7 @@ export function createGitHubService({
   const creatingPulls = new Map();
   const mergingPulls = new Map();
   const deletingBranches = new Map();
+  const creatingComments = new Map();
 
   async function readPull(fullName, number) {
     const pull = await request(`repos/${fullName}/pulls/${number}`);
@@ -213,6 +249,138 @@ export function createGitHubService({
     )
       throw new Error("Incomplete pull request response");
     return pull;
+  }
+
+  async function conversationAccess(fullName, number) {
+    const [pull, metadata] = await Promise.all([
+      readPull(fullName, number),
+      request(`repos/${fullName}`),
+    ]);
+    let commentBlockReason = "";
+    if (
+      typeof metadata?.archived !== "boolean" ||
+      typeof pull.locked !== "boolean"
+    )
+      commentBlockReason =
+        "Comment permissions could not be verified. Refresh before posting.";
+    else if (metadata.archived || metadata.disabled)
+      commentBlockReason =
+        "This repository is archived or disabled, so new comments cannot be posted.";
+    else if (pull.locked && metadata?.permissions?.push !== true)
+      commentBlockReason =
+        "This conversation is locked. Pink Labs could not verify permission to comment on it; open GitHub to check your access.";
+    // Readable public PRs do not require push permission to comment. GitHub also
+    // checks token scopes and interaction restrictions when the comment is sent.
+    return { canComment: !commentBlockReason, commentBlockReason };
+  }
+
+  async function conversationPageSet(endpoint) {
+    const rows = [];
+    const separator = endpoint.includes("?") ? "&" : "?";
+    for (let page = 1; page <= 3; page++) {
+      const batch = await request(
+        `${endpoint}${separator}per_page=100&page=${page}`,
+      );
+      if (!Array.isArray(batch) || batch.length > 100)
+        throw new Error("Incomplete conversation page");
+      rows.push(...batch);
+      if (batch.length < 100) return { rows, truncated: false };
+    }
+    // Probe one item beyond the 300-record bound without fetching another full page.
+    const extra = await request(`${endpoint}${separator}per_page=1&page=301`);
+    if (!Array.isArray(extra))
+      throw new Error("Incomplete conversation pagination");
+    return { rows, truncated: extra.length > 0 };
+  }
+
+  async function getPullRequestComments(input, value) {
+    const fullName = validateRepository(input);
+    const number = validatePullRequestNumber(value);
+    try {
+      const access = await conversationAccess(fullName, number);
+      const [general, reviews, inline] = await Promise.all([
+        conversationPageSet(`repos/${fullName}/issues/${number}/comments`),
+        conversationPageSet(`repos/${fullName}/pulls/${number}/reviews`),
+        conversationPageSet(
+          `repos/${fullName}/pulls/${number}/comments?sort=created&direction=asc`,
+        ),
+      ]);
+      const pendingReviews = new Set(
+        reviews.rows
+          .filter((row) => String(row?.state).toUpperCase() === "PENDING")
+          .map((row) => row.id),
+      );
+      const comments = [
+        ...general.rows.map((row) => pullComment(row, "comment")),
+        ...reviews.rows
+          .filter((row) => String(row?.state).toUpperCase() !== "PENDING")
+          .map((row) => pullComment(row, "review")),
+        ...inline.rows
+          .filter((row) => !pendingReviews.has(row?.pull_request_review_id))
+          .map((row) => pullComment(row, "inline")),
+      ];
+      const order = { comment: 0, review: 1, inline: 2 };
+      const unique = [
+        ...new Map(comments.map((comment) => [comment.id, comment])).values(),
+      ];
+      unique.sort(
+        (a, b) =>
+          Date.parse(a.date) - Date.parse(b.date) ||
+          order[a.kind] - order[b.kind] ||
+          Number(a.id.split(":")[1]) - Number(b.id.split(":")[1]),
+      );
+      return {
+        comments: unique,
+        truncated: general.truncated || reviews.truncated || inline.truncated,
+        ...access,
+      };
+    } catch (error) {
+      throw publicError(error, "GitHub pull request conversation");
+    }
+  }
+
+  function createPullRequestComment(input, value, fields) {
+    let fullName, number, payload;
+    try {
+      fullName = validateRepository(input);
+      number = validatePullRequestNumber(value);
+      payload = validatePullRequestCommentInput(fields);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const key = JSON.stringify([fullName.toLowerCase(), number, payload.body]);
+    if (creatingComments.has(key)) return creatingComments.get(key);
+    const operation = (async () => {
+      let access;
+      try {
+        access = await conversationAccess(fullName, number);
+      } catch (error) {
+        throw publicError(error, "GitHub comment permissions");
+      }
+      if (!access.canComment) throw actionError(access.commentBlockReason, 403);
+      try {
+        const created = await request(
+          `repos/${fullName}/issues/${number}/comments`,
+          { method: "POST", body: payload },
+        );
+        return pullComment(created, "comment");
+      } catch (error) {
+        if ([401, 403, 404, 429].includes(error.status))
+          throw publicError(error, "Comment posting");
+        if (error.status === 422)
+          throw actionError(
+            "GitHub rejected this comment. Check its content, your permissions, and posting limits before trying again.",
+            422,
+          );
+        // No automatic write retry or body-based reconciliation: identical text
+        // may be intentional, so it cannot prove that this particular POST succeeded.
+        throw new Error(
+          "GitHub did not confirm the comment. Refresh and check the comments before retrying; it may already have been posted.",
+        );
+      }
+    })().finally(() => creatingComments.delete(key));
+    creatingComments.set(key, operation);
+    return operation;
   }
 
   async function listPullRequests(input, value = "all") {
@@ -1225,6 +1393,8 @@ export function createGitHubService({
     listPullRequests,
     getPullRequestFiles,
     deletePullRequestBranch,
+    getPullRequestComments,
+    createPullRequestComment,
   };
 }
 
@@ -1239,3 +1409,5 @@ export const mergePullRequest = service.mergePullRequest;
 export const listPullRequests = service.listPullRequests;
 export const getPullRequestFiles = service.getPullRequestFiles;
 export const deletePullRequestBranch = service.deletePullRequestBranch;
+export const getPullRequestComments = service.getPullRequestComments;
+export const createPullRequestComment = service.createPullRequestComment;

@@ -9,6 +9,8 @@ import {
   listPullRequests,
   getPullRequestFiles,
   deletePullRequestBranch,
+  getPullRequestComments,
+  createPullRequestComment,
 } from "./github.mjs";
 import {
   isAllowedAPIRequest,
@@ -20,6 +22,7 @@ import {
   validateCommitSHA,
   validatePullRequestState,
   validateDeleteBranchInput,
+  validatePullRequestCommentInput,
 } from "./validation.mjs";
 
 const MAX_JSON_BYTES = 256 * 1024;
@@ -101,6 +104,8 @@ export function createApiMiddleware(
     listPullRequests,
     getPullRequestFiles,
     deletePullRequestBranch,
+    getPullRequestComments,
+    createPullRequestComment,
   },
 ) {
   return async function pinkApi(request, response, next) {
@@ -125,7 +130,10 @@ export function createApiMiddleware(
       url.pathname === "/api/merge" && request.method === "POST";
     const deletingBranch =
       url.pathname === "/api/delete-pull-branch" && request.method === "POST";
-    const writingPull = creatingPull || mergingPull || deletingBranch;
+    const commentingPull =
+      url.pathname === "/api/pull-comments" && request.method === "POST";
+    const writingPull =
+      creatingPull || mergingPull || deletingBranch || commentingPull;
     if (request.method !== "GET" && !writingPull)
       return send(405, { error: "This action is not supported." });
     if (
@@ -171,6 +179,17 @@ export function createApiMiddleware(
             ),
           );
         }
+        if (commentingPull) {
+          const { number, ...commentFields } = fields;
+          return send(
+            200,
+            await services.createPullRequestComment(
+              fullName,
+              validatePullRequestNumber(number),
+              validatePullRequestCommentInput(commentFields),
+            ),
+          );
+        }
         return send(
           200,
           await services.createPullRequest(
@@ -197,6 +216,7 @@ export function createApiMiddleware(
           "/api/pull",
           "/api/pulls",
           "/api/pull-files",
+          "/api/pull-comments",
         ].includes(url.pathname)
       ) {
         let repo;
@@ -215,10 +235,22 @@ export function createApiMiddleware(
               validatePullRequestState(url.searchParams.get("state") ?? "all"),
             ),
           );
-        if (["/api/pull", "/api/pull-files"].includes(url.pathname)) {
+        if (
+          ["/api/pull", "/api/pull-files", "/api/pull-comments"].includes(
+            url.pathname,
+          )
+        ) {
           const number = url.searchParams.get("number");
           if (!/^[1-9]\d*$/.test(number || ""))
             throw badRequest("Choose a valid pull request number.");
+          if (url.pathname === "/api/pull-comments")
+            return send(
+              200,
+              await services.getPullRequestComments(
+                repo,
+                validatePullRequestNumber(Number(number)),
+              ),
+            );
           if (url.pathname === "/api/pull-files")
             return send(
               200,

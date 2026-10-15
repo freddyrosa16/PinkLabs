@@ -14,6 +14,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, external } from "./api";
 import { PullRequestDiff } from "./PullRequestDiff";
+import { PullRequestComments } from "./PullRequestComments";
 import type { MergeMethod, PullRequestDetail, Status } from "./types";
 
 function pullRequestError(cause: unknown) {
@@ -62,12 +63,14 @@ export function PullRequestDetails({
   changed,
   busyChanged,
   refreshVersion,
+  commentsRefreshVersion,
 }: {
   fullName: string;
   number: number;
   changed: (message: string) => void;
   busyChanged?: (busy: boolean) => void;
   refreshVersion: string;
+  commentsRefreshVersion: string;
 }) {
   const [detail, setDetail] = useState<PullRequestDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,6 +82,7 @@ export function PullRequestDetails({
   const [confirming, setConfirming] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [saving, setSaving] = useState<"merge" | "delete" | null>(null);
+  const [commentSaving, setCommentSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [mergedSha, setMergedSha] = useState("");
   const [deletedBranch, setDeletedBranch] = useState("");
@@ -89,16 +93,20 @@ export function PullRequestDetails({
   busyCallback.current = busyChanged;
   useEffect(() => () => busyCallback.current?.(false), []);
   useEffect(() => {
+    busyCallback.current?.(Boolean(saving || commentSaving));
+  }, [saving, commentSaving]);
+  useEffect(() => {
     if (
       previousRefresh.current === refreshVersion ||
       saving ||
+      commentSaving ||
       confirming ||
       confirmingDelete
     )
       return;
     previousRefresh.current = refreshVersion;
     setRetry((value) => value + 1);
-  }, [refreshVersion, saving, confirming, confirmingDelete]);
+  }, [refreshVersion, saving, commentSaving, confirming, confirmingDelete]);
   useEffect(() => {
     let current = true;
     setLoading(true);
@@ -134,7 +142,7 @@ export function PullRequestDetails({
   }, [fullName, number, retry]);
 
   function refresh() {
-    if (submitting.current) return;
+    if (submitting.current || commentSaving) return;
     setLoading(true);
     setConfirming(false);
     setConfirmingDelete(false);
@@ -148,6 +156,7 @@ export function PullRequestDetails({
       !detail.mergeMethods.includes(method) ||
       !confirming ||
       saving ||
+      commentSaving ||
       loading ||
       error ||
       submitting.current
@@ -155,7 +164,6 @@ export function PullRequestDetails({
       return;
     submitting.current = true;
     setSaving("merge");
-    busyCallback.current?.(true);
     let result;
     try {
       result = await api.mergePullRequest(fullName, number, {
@@ -174,7 +182,6 @@ export function PullRequestDetails({
     } finally {
       submitting.current = false;
       setSaving(null);
-      busyCallback.current?.(false);
     }
     completedWrite.current = true;
     setMergedSha(result.sha);
@@ -196,6 +203,7 @@ export function PullRequestDetails({
       deletedBranch ||
       !confirmingDelete ||
       saving ||
+      commentSaving ||
       loading ||
       error ||
       submitting.current
@@ -203,7 +211,6 @@ export function PullRequestDetails({
       return;
     submitting.current = true;
     setSaving("delete");
-    busyCallback.current?.(true);
     try {
       const result = await api.deletePullRequestBranch(fullName, number, {
         branch: cleanup.branch,
@@ -220,7 +227,6 @@ export function PullRequestDetails({
     } finally {
       submitting.current = false;
       setSaving(null);
-      busyCallback.current?.(false);
     }
     completedWrite.current = true;
     setDeletedBranch(cleanup.branch);
@@ -242,7 +248,7 @@ export function PullRequestDetails({
   }
   const done = Boolean(mergedSha || detail?.merged);
   const isOpen = detail?.state === "open" && !done;
-  const blocked = Boolean(saving || loading || error);
+  const blocked = Boolean(saving || commentSaving || loading || error);
   const cleanup = detail?.branchCleanup;
   const branchDeleted = Boolean(deletedBranch || cleanup?.deleted);
   const titleId = `pr-details-title-${number}`;
@@ -256,7 +262,7 @@ export function PullRequestDetails({
         </div>
         <button
           className="text-button"
-          disabled={loading || Boolean(saving)}
+          disabled={loading || Boolean(saving) || commentSaving}
           onClick={refresh}
         >
           <SyncIcon size={12} className={loading ? "spin" : ""} />{" "}
@@ -353,89 +359,98 @@ export function PullRequestDetails({
               Files changed <span>{detail.changedFiles}</span>
             </button>
           </div>
-          {tab === "overview" ? (
-            <div
-              role="tabpanel"
-              id={`pr-overview-${number}`}
-              aria-labelledby={`pr-overview-tab-${number}`}
-            >
-              <div className="pr-description markdown">
-                {detail.body ? (
-                  <Markdown
-                    remarkPlugins={[remarkGfm]}
-                    skipHtml
-                    components={{
-                      a: ({ href, children }) => (
-                        <button
-                          className="markdown-link"
-                          onClick={() => href && external(href)}
-                        >
-                          {children}
-                        </button>
-                      ),
-                      img: ({ alt }) => (
-                        <span className="muted">
-                          {alt ? `[Image: ${alt}]` : "[Image]"}
-                        </span>
-                      ),
-                    }}
-                  >
-                    {detail.body}
-                  </Markdown>
-                ) : (
-                  <p className="muted">No description provided.</p>
-                )}
-              </div>
-              {isOpen && (
-                <div className="pr-checks">
-                  <div className="pr-checks-heading">
-                    <h3>Checks</h3>
-                  </div>
-                  {detail.checksIncomplete && (
-                    <p className="pr-check-warning">
-                      Some check results could not be loaded. Refresh to try
-                      again.
-                    </p>
-                  )}
-                  {!detail.checks.length ? (
-                    <p className="muted">
-                      {detail.checksIncomplete
-                        ? "Check status is unavailable."
-                        : "No automated checks reported for this commit."}
-                    </p>
-                  ) : (
-                    <ul>
-                      {detail.checks.map((check, index) => (
-                        <li key={`${check.name}-${index}`}>
-                          <CheckStatusIcon status={check.status} />
-                          <span>{check.name}</span>
-                          <small>
-                            {
-                              {
-                                success: "Passed",
-                                failure: "Failed",
-                                pending: "Running / pending",
-                                none: "Skipped / neutral",
-                              }[check.status]
-                            }
-                          </small>
-                          {check.url && (
-                            <button
-                              className="icon-button"
-                              aria-label={`Open ${check.name} on GitHub`}
-                              onClick={() => external(check.url)}
-                            >
-                              <ArrowUpRightIcon size={12} />
-                            </button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+          <div
+            role="tabpanel"
+            id={`pr-overview-${number}`}
+            aria-labelledby={`pr-overview-tab-${number}`}
+            hidden={tab !== "overview"}
+          >
+            <div className="pr-description markdown">
+              {detail.body ? (
+                <Markdown
+                  remarkPlugins={[remarkGfm]}
+                  skipHtml
+                  components={{
+                    a: ({ href, children }) => (
+                      <button
+                        className="markdown-link"
+                        onClick={() => href && external(href)}
+                      >
+                        {children}
+                      </button>
+                    ),
+                    img: ({ alt }) => (
+                      <span className="muted">
+                        {alt ? `[Image: ${alt}]` : "[Image]"}
+                      </span>
+                    ),
+                  }}
+                >
+                  {detail.body}
+                </Markdown>
+              ) : (
+                <p className="muted">No description provided.</p>
               )}
             </div>
-          ) : (
+            {isOpen && (
+              <div className="pr-checks">
+                <div className="pr-checks-heading">
+                  <h3>Checks</h3>
+                </div>
+                {detail.checksIncomplete && (
+                  <p className="pr-check-warning">
+                    Some check results could not be loaded. Refresh to try
+                    again.
+                  </p>
+                )}
+                {!detail.checks.length ? (
+                  <p className="muted">
+                    {detail.checksIncomplete
+                      ? "Check status is unavailable."
+                      : "No automated checks reported for this commit."}
+                  </p>
+                ) : (
+                  <ul>
+                    {detail.checks.map((check, index) => (
+                      <li key={`${check.name}-${index}`}>
+                        <CheckStatusIcon status={check.status} />
+                        <span>{check.name}</span>
+                        <small>
+                          {
+                            {
+                              success: "Passed",
+                              failure: "Failed",
+                              pending: "Running / pending",
+                              none: "Skipped / neutral",
+                            }[check.status]
+                          }
+                        </small>
+                        {check.url && (
+                          <button
+                            className="icon-button"
+                            aria-label={`Open ${check.name} on GitHub`}
+                            onClick={() => external(check.url)}
+                          >
+                            <ArrowUpRightIcon size={12} />
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <PullRequestComments
+              fullName={fullName}
+              number={number}
+              refreshVersion={`${reviewRevision}:${commentsRefreshVersion}`}
+              disabled={Boolean(
+                saving || confirming || confirmingDelete || loading,
+              )}
+              busyChanged={setCommentSaving}
+            />
+          </div>
+          {tab === "files" && (
             <div
               role="tabpanel"
               id={`pr-files-${number}`}
