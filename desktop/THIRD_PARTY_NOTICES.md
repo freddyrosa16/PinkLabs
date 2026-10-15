@@ -110,22 +110,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Animated interface icon attribution
 
-`src/AnimatedIcon.tsx` adapts the SVG geometry for six icons from the official [Lucide project](https://github.com/lucide-icons/lucide), pinned to commit [`7b0196e249ca09ca27c584c497aca9a8cab8a7f5`](https://github.com/lucide-icons/lucide/tree/7b0196e249ca09ca27c584c497aca9a8cab8a7f5). The icon paths and shapes are retained; React wrappers, grouping, and CSS gestures are local adaptations. No runtime icon or motion dependency is added.
+`src/AnimatedIcon.tsx` retains two SVG icons from the official [Lucide project](https://github.com/lucide-icons/lucide), pinned to commit [`7b0196e249ca09ca27c584c497aca9a8cab8a7f5`](https://github.com/lucide-icons/lucide/tree/7b0196e249ca09ca27c584c497aca9a8cab8a7f5). Their paths and shapes are retained; React wrappers, grouping, and CSS gestures are local adaptations. No runtime icon or motion dependency is added.
 
 | Interface use      | Original SVG                                                                                                                            |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| New Chat           | [pencil.svg](https://github.com/lucide-icons/lucide/blob/7b0196e249ca09ca27c584c497aca9a8cab8a7f5/icons/pencil.svg)                     |
-| Agents             | [telescope.svg](https://github.com/lucide-icons/lucide/blob/7b0196e249ca09ca27c584c497aca9a8cab8a7f5/icons/telescope.svg)               |
 | Pull Requests      | [git-pull-request.svg](https://github.com/lucide-icons/lucide/blob/7b0196e249ca09ca27c584c497aca9a8cab8a7f5/icons/git-pull-request.svg) |
-| IDE                | [code.svg](https://github.com/lucide-icons/lucide/blob/7b0196e249ca09ca27c584c497aca9a8cab8a7f5/icons/code.svg)                         |
-| Project folders    | [folder.svg](https://github.com/lucide-icons/lucide/blob/7b0196e249ca09ca27c584c497aca9a8cab8a7f5/icons/folder.svg)                     |
 | Repository refresh | [refresh-cw.svg](https://github.com/lucide-icons/lucide/blob/7b0196e249ca09ca27c584c497aca9a8cab8a7f5/icons/refresh-cw.svg)             |
+
+The message-plus (New Chat), bot (Agents), terminal window (IDE), open project folder, and sidebar-open/sidebar-close SVGs are original project drawings made from simple shapes. Their legacy component names `pencil`, `telescope`, `code`, and `folder` remain for caller compatibility; their current geometry is not copied from Lucide. The new drawings animate only a small interior part, such as the plus sign, bot eyes, terminal prompt/cursor, folder flap, or directional chevron, while keeping the surrounding outline stable.
 
 The interaction direction was informed by the user-provided [Lucide Animated](https://lucide-animated.com/) and [Its Hover](https://www.itshover.com/icons) references. Their animation implementations are not copied. The local CSS plays a small gesture once on an enabled parent button's hover or keyboard focus, then settles; reduced-motion preferences disable these gestures. Explicit loading indicators retain their existing behavior.
 
 ### Upstream Lucide license
 
-The complete pinned [upstream license](https://github.com/lucide-icons/lucide/blob/7b0196e249ca09ca27c584c497aca9a8cab8a7f5/LICENSE) follows, including the Feather notice applicable to `code`.
+The complete pinned [upstream license](https://github.com/lucide-icons/lucide/blob/7b0196e249ca09ca27c584c497aca9a8cab8a7f5/LICENSE) follows, including its Feather notice. The current original terminal-window drawing replaces the previously used Feather-derived `code` icon.
 
 ```text
 ISC License

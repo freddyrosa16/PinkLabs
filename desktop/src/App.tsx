@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type CSSProperties,
+} from "react";
 import {
   ArrowUpIcon,
   ArrowUpRightIcon,
@@ -10,8 +16,6 @@ import {
   MarkGithubIcon,
   PlusIcon,
   SearchIcon,
-  SidebarCollapseIcon,
-  SidebarExpandIcon,
   SquareIcon,
   TelescopeIcon,
   TrashIcon,
@@ -32,6 +36,7 @@ import {
 } from "./store";
 import type { Provider, RepoSummary } from "./types";
 import { useRepository } from "./useRepository";
+import { useSidebar } from "./useSidebar";
 const providers: { id: Provider; name: string; asset: string }[] = [
   { id: "claude", name: "Claude", asset: "claude-color.svg" },
   { id: "openai", name: "OpenAI / Codex", asset: "openai.svg" },
@@ -58,7 +63,9 @@ export function App() {
   const [workspace, setWorkspace] = useState<Workspace>(readWorkspace);
   const [view, setView] = useState("github");
   const [tab, setTab] = useState("overview");
-  const [sidebar, setSidebar] = useState(true);
+  const sidebar = useSidebar();
+  const mobileMenuRef = useRef<HTMLButtonElement>(null);
+  const wasMobileOpen = useRef(false);
   const [composerRepo, setComposerRepo] = useState<string | null>(null);
   const [selectedPull, setSelectedPull] = useState<{
     repo: string;
@@ -79,6 +86,32 @@ export function App() {
   const [undoSession, setUndoSession] = useState<Session | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageEnd = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!sidebar.mobile) setMobileOpen(false);
+  }, [sidebar.mobile]);
+  useEffect(() => {
+    if (!sidebar.mobile) {
+      wasMobileOpen.current = false;
+      return;
+    }
+    if (!mobileOpen) {
+      if (wasMobileOpen.current)
+        mobileMenuRef.current?.focus({ preventScroll: true });
+      wasMobileOpen.current = false;
+      return;
+    }
+    wasMobileOpen.current = true;
+    if (modal) return;
+    sidebar.toggleRef.current?.focus({ preventScroll: true });
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !modal && !event.defaultPrevented) {
+        setMobileOpen(false);
+        mobileMenuRef.current?.focus({ preventScroll: true });
+      }
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [mobileOpen, sidebar.mobile, modal]);
   function notify(message: string) {
     setUndoSession(null);
     setToast(message);
@@ -244,237 +277,296 @@ export function App() {
   }
   return (
     <div
-      className={`app ${sidebar ? "" : "sidebar-hidden"} ${mobileOpen ? "mobile-open" : ""}`}
+      className={`app ${sidebar.collapsed ? "sidebar-hidden" : ""} ${mobileOpen ? "mobile-open" : ""} ${sidebar.dragging ? "sidebar-resizing" : ""}`}
+      style={
+        {
+          "--sidebar-space": `${sidebar.width}px`,
+          "--sidebar-width": `${sidebar.contentWidth}px`,
+        } as CSSProperties
+      }
     >
       <button
+        ref={mobileMenuRef}
         className="mobile-menu icon-button"
+        aria-expanded={mobileOpen}
+        aria-controls="workspace-navigation"
         aria-label="Open navigation"
         onClick={() => {
-          setSidebar(true);
           setMobileOpen(true);
         }}
       >
-        <SidebarExpandIcon />
+        <AnimatedIcon name="sidebar-open" size={18} />
       </button>
-      {mobileOpen && (
-        <button
-          className="mobile-backdrop"
-          aria-label="Close navigation"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-      <aside className="sidebar" aria-label="Workspace navigation">
-        <div className="window-area">
-          <span className="browser-window-dots">
-            <i />
-            <i />
-            <i />
-          </span>
-          <button
-            className="icon-button sidebar-toggle"
-            aria-label="Collapse sidebar"
-            onClick={() => {
-              setSidebar(false);
-              setMobileOpen(false);
-            }}
-          >
-            <SidebarCollapseIcon />
-          </button>
-        </div>
-        <div className="brand">
-          <span className="brand-mark">
-            P<span>·</span>
-          </span>
-          <strong>Pink Labs</strong>
-          <span className="workspace-label">Personal</span>
-        </div>
-        <nav className="main-nav">
-          {nav.map((n) => (
+      <button
+        className="mobile-backdrop"
+        aria-label="Close navigation"
+        tabIndex={-1}
+        aria-hidden={!mobileOpen}
+        onClick={() => {
+          setMobileOpen(false);
+          mobileMenuRef.current?.focus({ preventScroll: true });
+        }}
+      />
+      <div className="sidebar-frame" ref={sidebar.frameRef}>
+        <aside
+          id="workspace-navigation"
+          ref={sidebar.sidebarRef}
+          className="sidebar"
+          aria-label="Workspace navigation"
+          inert={
+            sidebar.mobile
+              ? !mobileOpen
+              : sidebar.collapsed && !sidebar.dragging
+          }
+        >
+          <div className="window-area">
+            <span className="browser-window-dots">
+              <i />
+              <i />
+              <i />
+            </span>
             <button
-              className={view === n.id ? "selected" : ""}
-              key={n.id}
+              ref={sidebar.toggleRef}
+              className="icon-button sidebar-toggle"
+              aria-controls="workspace-navigation"
+              aria-expanded={sidebar.mobile ? mobileOpen : !sidebar.collapsed}
+              aria-label="Collapse sidebar"
               onClick={() => {
-                setMobileOpen(false);
-                if (n.id === "chat") newChat();
-                else {
-                  setView(n.id);
-                  if (n.id === "github") setTab("overview");
-                  if (n.id === "pulls") setTab("pulls");
+                if (sidebar.mobile) {
+                  setMobileOpen(false);
+                  mobileMenuRef.current?.focus({ preventScroll: true });
+                } else {
+                  sidebar.setCollapsed(true);
+                  requestAnimationFrame(() =>
+                    sidebar.restoreRef.current?.focus({ preventScroll: true }),
+                  );
                 }
               }}
             >
-              {n.icon}
-              <span>{n.label}</span>
-              {n.id === "pulls" && !!repo?.openPrCount && (
-                <small>{repo.openPrCount}</small>
-              )}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-scroll">
-          <div className="group-heading">
-            <button
-              onClick={() => setProjectsOpen(!projectsOpen)}
-              aria-expanded={projectsOpen}
-            >
-              {projectsOpen ? (
-                <ChevronDownIcon size={12} />
-              ) : (
-                <ChevronRightIcon size={12} />
-              )}
-              Projects
-            </button>
-            <button
-              className="icon-button"
-              aria-label="Add project"
-              onClick={() => setModal({ type: "project" })}
-            >
-              <PlusIcon size={14} />
+              <AnimatedIcon name="sidebar-close" size={18} />
             </button>
           </div>
-          {projectsOpen && (
-            <div className="project-list">
-              {workspace.projects.map((p) => (
-                <div key={p.id}>
-                  <div className="project-row">
-                    <button
-                      className="project-select"
-                      onClick={() =>
-                        setExpandedProjects((prev) =>
-                          prev.includes(p.id)
-                            ? prev.filter((id) => id !== p.id)
-                            : [...prev, p.id],
-                        )
-                      }
-                      aria-expanded={expandedProjects.includes(p.id)}
-                    >
-                      {expandedProjects.includes(p.id) ? (
-                        <ChevronDownIcon size={12} />
-                      ) : (
-                        <ChevronRightIcon size={12} />
-                      )}
-                      <AnimatedIcon name="folder" />
-                      <span>{p.name}</span>
-                    </button>
-                    <button
-                      className="row-delete icon-button"
-                      aria-label={`Remove project ${p.name}`}
-                      onClick={() =>
-                        setModal({ type: "remove-project", id: p.id })
-                      }
-                    >
-                      <TrashIcon size={13} />
-                    </button>
-                  </div>
-                  {expandedProjects.includes(p.id) && (
-                    <div className="project-sessions">
-                      {workspace.sessions
-                        .filter((s) => s.projectId === p.id)
-                        .map(sessionRow)}
+          <div className="brand">
+            <span className="brand-mark">
+              P<span>·</span>
+            </span>
+            <strong>Pink Labs</strong>
+            <span className="workspace-label">Personal</span>
+          </div>
+          <nav className="main-nav">
+            {nav.map((n) => (
+              <button
+                className={view === n.id ? "selected" : ""}
+                key={n.id}
+                onClick={() => {
+                  setMobileOpen(false);
+                  if (n.id === "chat") newChat();
+                  else {
+                    setView(n.id);
+                    if (n.id === "github") setTab("overview");
+                    if (n.id === "pulls") setTab("pulls");
+                  }
+                }}
+              >
+                {n.icon}
+                <span>{n.label}</span>
+                {n.id === "pulls" && !!repo?.openPrCount && (
+                  <small>{repo.openPrCount}</small>
+                )}
+              </button>
+            ))}
+          </nav>
+          <div className="sidebar-scroll">
+            <div className="group-heading">
+              <button
+                onClick={() => setProjectsOpen(!projectsOpen)}
+                aria-expanded={projectsOpen}
+              >
+                {projectsOpen ? (
+                  <ChevronDownIcon size={12} />
+                ) : (
+                  <ChevronRightIcon size={12} />
+                )}
+                Projects
+              </button>
+              <button
+                className="icon-button"
+                aria-label="Add project"
+                onClick={() => setModal({ type: "project" })}
+              >
+                <PlusIcon size={14} />
+              </button>
+            </div>
+            {projectsOpen && (
+              <div className="project-list">
+                {workspace.projects.map((p) => (
+                  <div key={p.id}>
+                    <div className="project-row">
                       <button
-                        className="project-new"
-                        onClick={() => {
-                          newChat();
-                          setProjectId(p.id);
-                        }}
+                        className="project-select"
+                        onClick={() =>
+                          setExpandedProjects((prev) =>
+                            prev.includes(p.id)
+                              ? prev.filter((id) => id !== p.id)
+                              : [...prev, p.id],
+                          )
+                        }
+                        aria-expanded={expandedProjects.includes(p.id)}
                       >
-                        <PlusIcon size={12} />
-                        New conversation
+                        {expandedProjects.includes(p.id) ? (
+                          <ChevronDownIcon size={12} />
+                        ) : (
+                          <ChevronRightIcon size={12} />
+                        )}
+                        <AnimatedIcon name="folder" />
+                        <span>{p.name}</span>
                       </button>
-                      {p.repo && (
+                      <button
+                        className="row-delete icon-button"
+                        aria-label={`Remove project ${p.name}`}
+                        onClick={() =>
+                          setModal({ type: "remove-project", id: p.id })
+                        }
+                      >
+                        <TrashIcon size={13} />
+                      </button>
+                    </div>
+                    {expandedProjects.includes(p.id) && (
+                      <div className="project-sessions">
+                        {workspace.sessions
+                          .filter((s) => s.projectId === p.id)
+                          .map(sessionRow)}
                         <button
                           className="project-new"
                           onClick={() => {
-                            setWorkspace((w) => ({ ...w, repo: p.repo! }));
-                            setView("github");
-                            setTab("overview");
+                            newChat();
+                            setProjectId(p.id);
                           }}
                         >
-                          <MarkGithubIcon size={12} />
-                          Open repository
+                          <PlusIcon size={12} />
+                          New conversation
                         </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {workspace.projects.length === 0 && (
-                <button
-                  className="sidebar-hint"
-                  onClick={() => setModal({ type: "project" })}
-                >
-                  Add your first project
-                </button>
-              )}
-            </div>
-          )}
-          <div className="group-heading sessions-heading">
-            <button
-              onClick={() => setSessionsOpen(!sessionsOpen)}
-              aria-expanded={sessionsOpen}
-            >
-              {sessionsOpen ? (
-                <ChevronDownIcon size={12} />
-              ) : (
-                <ChevronRightIcon size={12} />
-              )}
-              Sessions <small>{workspace.sessions.length || ""}</small>
-            </button>
-          </div>
-          {sessionsOpen && (
-            <div className="session-list">
-              {[...workspace.sessions]
-                .sort((a, b) => b.updated - a.updated)
-                .map(sessionRow)}
-              {workspace.sessions.length === 0 && (
-                <div className="sidebar-empty">
-                  <CommentDiscussionIcon />
-                  <p>
-                    Your conversations
-                    <br />
-                    will appear here.
-                  </p>
-                  <button onClick={newChat}>
-                    Start a chat <PlusIcon size={12} />
+                        {p.repo && (
+                          <button
+                            className="project-new"
+                            onClick={() => {
+                              setWorkspace((w) => ({ ...w, repo: p.repo! }));
+                              setView("github");
+                              setTab("overview");
+                            }}
+                          >
+                            <MarkGithubIcon size={12} />
+                            Open repository
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {workspace.projects.length === 0 && (
+                  <button
+                    className="sidebar-hint"
+                    onClick={() => setModal({ type: "project" })}
+                  >
+                    Add your first project
                   </button>
-                </div>
-              )}
+                )}
+              </div>
+            )}
+            <div className="group-heading sessions-heading">
+              <button
+                onClick={() => setSessionsOpen(!sessionsOpen)}
+                aria-expanded={sessionsOpen}
+              >
+                {sessionsOpen ? (
+                  <ChevronDownIcon size={12} />
+                ) : (
+                  <ChevronRightIcon size={12} />
+                )}
+                Sessions <small>{workspace.sessions.length || ""}</small>
+              </button>
             </div>
-          )}
-        </div>
-        <div className="sidebar-footer">
-          <span className={`connection-dot ${error ? "offline" : ""}`} />
-          <span>
-            {loading
-              ? repo
-                ? "Updating GitHub…"
-                : "Syncing GitHub…"
-              : error
-                ? "GitHub unavailable"
-                : "Connected to GitHub"}
-          </span>
-          {repo && (
-            <button
-              className="icon-button"
-              title={`Last checked ${new Date(repo.fetchedAt).toLocaleTimeString()}`}
-              disabled={loading}
-              onClick={refresh}
-            >
-              <CheckCircleIcon size={13} />
-            </button>
-          )}
-        </div>
-      </aside>
-      <main className="main-content">
-        {!sidebar && (
-          <button
-            className="restore-sidebar icon-button"
-            aria-label="Expand sidebar"
-            onClick={() => setSidebar(true)}
-          >
-            <SidebarExpandIcon />
-          </button>
-        )}
+            {sessionsOpen && (
+              <div className="session-list">
+                {[...workspace.sessions]
+                  .sort((a, b) => b.updated - a.updated)
+                  .map(sessionRow)}
+                {workspace.sessions.length === 0 && (
+                  <div className="sidebar-empty">
+                    <CommentDiscussionIcon />
+                    <p>
+                      Your conversations
+                      <br />
+                      will appear here.
+                    </p>
+                    <button onClick={newChat}>
+                      Start a chat <PlusIcon size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="sidebar-footer">
+            <span className={`connection-dot ${error ? "offline" : ""}`} />
+            <span>
+              {loading
+                ? repo
+                  ? "Updating GitHub…"
+                  : "Syncing GitHub…"
+                : error
+                  ? "GitHub unavailable"
+                  : "Connected to GitHub"}
+            </span>
+            {repo && (
+              <button
+                className="icon-button"
+                title={`Last checked ${new Date(repo.fetchedAt).toLocaleTimeString()}`}
+                disabled={loading}
+                onClick={refresh}
+              >
+                <CheckCircleIcon size={13} />
+              </button>
+            )}
+          </div>
+        </aside>
+      </div>
+      <div
+        className="sidebar-resize-handle"
+        role="separator"
+        aria-label="Resize sidebar"
+        aria-orientation="vertical"
+        aria-controls="workspace-navigation"
+        aria-valuemin={0}
+        aria-valuemax={sidebar.maxWidth}
+        aria-valuenow={Math.round(sidebar.width)}
+        aria-valuetext={
+          sidebar.width === 0
+            ? "Collapsed"
+            : `${Math.round(sidebar.width)} pixels`
+        }
+        title="Drag to resize; drag left to hide. Arrow keys resize; Enter toggles."
+        tabIndex={sidebar.mobile ? -1 : 0}
+        {...sidebar.resizeProps}
+      />
+      <main className="main-content" inert={sidebar.mobile && mobileOpen}>
+        <button
+          ref={sidebar.restoreRef}
+          className="restore-sidebar icon-button"
+          aria-label="Expand sidebar"
+          aria-expanded={!sidebar.collapsed}
+          aria-controls="workspace-navigation"
+          tabIndex={sidebar.collapsed ? 0 : -1}
+          aria-hidden={!sidebar.collapsed}
+          onClick={() => {
+            sidebar.setCollapsed(false);
+            requestAnimationFrame(() =>
+              sidebar.toggleRef.current?.focus({ preventScroll: true }),
+            );
+          }}
+        >
+          <AnimatedIcon name="sidebar-open" size={18} />
+        </button>
         {view === "github" || view === "pulls" ? (
           <GitHubView
             repo={repo}

@@ -12,28 +12,37 @@
 }
 
 .animated-icon[data-icon="pencil"] {
-  --icon-gesture: icon-write;
+  --icon-gesture: icon-compose;
+}
+.animated-icon__compose {
+  transform-origin: 12px 11px;
 }
 .animated-icon[data-icon="telescope"] {
-  --icon-gesture: icon-look;
-}
-.animated-icon[data-icon="telescope"] .animated-icon__motion {
-  transform-origin: 12px 13px;
+  --icon-gesture: icon-attention;
 }
 .animated-icon[data-icon="pull-request"] {
   --icon-gesture: icon-branch;
 }
-.animated-icon__right {
-  --icon-gesture: icon-code-right;
+.animated-icon__prompt {
+  --icon-gesture: icon-prompt;
 }
-.animated-icon__left {
-  --icon-gesture: icon-code-left;
+.animated-icon__cursor {
+  --icon-gesture: icon-cursor;
 }
 .animated-icon[data-icon="folder"] {
-  --icon-gesture: icon-folder;
+  --icon-gesture: icon-unfold;
+}
+.animated-icon__flap {
+  transform-origin: 3px 19px;
 }
 .animated-icon[data-icon="refresh"] {
   --icon-gesture: icon-refresh;
+}
+.animated-icon[data-icon="sidebar-close"] {
+  --icon-gesture: icon-sidebar-close;
+}
+.animated-icon[data-icon="sidebar-open"] {
+  --icon-gesture: icon-sidebar-open;
 }
 
 /* The containing control owns interaction and focus. Each gesture runs once,
@@ -44,28 +53,28 @@
   animation: var(--icon-gesture) 560ms cubic-bezier(0.22, 1, 0.36, 1) 1;
 }
 
-@keyframes icon-write {
-  0%,
-  100% {
-    transform: none;
-  }
-  30% {
-    transform: translate(-0.8px, 0.5px) rotate(-7deg);
-  }
-  65% {
-    transform: translate(0.7px, -0.4px) rotate(3deg);
-  }
-}
-@keyframes icon-look {
+@keyframes icon-compose {
   0%,
   100% {
     transform: none;
   }
   40% {
-    transform: rotate(-8deg);
+    transform: translateY(-0.6px) scale(1.2);
   }
   70% {
-    transform: rotate(2deg);
+    transform: scale(0.95);
+  }
+}
+@keyframes icon-attention {
+  0%,
+  100% {
+    transform: none;
+  }
+  30% {
+    transform: translateX(1px);
+  }
+  65% {
+    transform: translateX(-0.5px);
   }
 }
 @keyframes icon-branch {
@@ -77,34 +86,57 @@
     transform: translateY(-1.6px);
   }
 }
-@keyframes icon-code-right {
+@keyframes icon-prompt {
   0%,
   100% {
     transform: none;
   }
   40% {
-    transform: translateX(1.4px);
+    transform: translateX(1px);
   }
 }
-@keyframes icon-code-left {
+@keyframes icon-cursor {
   0%,
   100% {
+    opacity: 1;
     transform: none;
   }
-  40% {
-    transform: translateX(-1.4px);
+  35% {
+    opacity: 0.3;
+  }
+  65% {
+    opacity: 1;
+    transform: translateX(0.6px);
   }
 }
-@keyframes icon-folder {
+@keyframes icon-unfold {
   0%,
   100% {
     transform: none;
   }
   40% {
-    transform: translateY(-0.8px) rotate(-5deg);
+    transform: translateY(-0.8px) skewX(-5deg);
   }
   70% {
-    transform: rotate(1deg);
+    transform: skewX(1deg);
+  }
+}
+@keyframes icon-sidebar-close {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: translateX(-1.5px);
+  }
+}
+@keyframes icon-sidebar-open {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: translateX(1.5px);
   }
 }
 @keyframes icon-refresh {
@@ -120,5 +152,6 @@
   .animated-icon .animated-icon__motion {
     animation: none !important;
     transform: none !important;
+    opacity: 1 !important;
   }
 }

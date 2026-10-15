@@ -33,3 +33,5 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Keep PR navigation concise: Overview, Files changed with its count, commits, and clickable green/red totals share one row. Remove duplicate file-count headings and the separate lower tab bar. Totals open the diff; preserve file position and comment drafts across tabs.
 - Refined syntax preference replaces the prior pastel palette: use distinct Codex-inspired pink keywords, green strings, orange numbers, violet functions/types, gold properties, blue tags, and subdued neutral comments. Keep normal code bright and the shared green/red change markers unchanged.
 - Add restrained Lucide-style icon gestures on hover and keyboard focus for common controls. Animate once and settle, honor reduced motion, preserve brand logos, and keep automatic refresh quiet.
+
+- Sidebar uses fresh message-plus, bot, terminal, and open-folder icons with animated panel toggles. Its edge is draggable with a bounded width, continuous movement, smooth full collapse/reopen, and a remembered expanded width. Preserve normal sidebar scrolling, keyboard resizing, reduced motion, and mobile drawer behavior.

@@ -1,8 +1,16 @@
 import "./animated-icons.css";
 
-// Lucide paths, pinned sources and licenses: ../THIRD_PARTY_NOTICES.md.
+// Original interface drawings, plus retained Lucide PR/refresh paths.
+// Pinned sources and licenses: ../THIRD_PARTY_NOTICES.md.
 type AnimatedIconName =
-  "pencil" | "telescope" | "pull-request" | "code" | "folder" | "refresh";
+  | "pencil"
+  | "telescope"
+  | "pull-request"
+  | "code"
+  | "folder"
+  | "refresh"
+  | "sidebar-close"
+  | "sidebar-open";
 
 export function AnimatedIcon({
   name,
@@ -28,22 +36,22 @@ export function AnimatedIcon({
       focusable="false"
     >
       {name === "pencil" && (
-        <g className="animated-icon__motion">
-          <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
-          <path d="m15 5 4 4" />
-        </g>
+        <>
+          <path d="M7 4h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H9l-5 3v-5a4 4 0 0 1-1-2V8a4 4 0 0 1 4-4Z" />
+          <g className="animated-icon__motion animated-icon__compose">
+            <path d="M12 8v6m-3-3h6" />
+          </g>
+        </>
       )}
       {name === "telescope" && (
         <>
-          <g className="animated-icon__motion">
-            <path d="m10.065 12.493-6.18 1.318a.934.934 0 0 1-1.108-.702l-.537-2.15a1.07 1.07 0 0 1 .691-1.265l13.504-4.44" />
-            <path d="m13.56 11.747 4.332-.924" />
-            <path d="M16.485 5.94a2 2 0 0 1 1.455-2.425l1.09-.272a1 1 0 0 1 1.212.727l1.515 6.06a1 1 0 0 1-.727 1.213l-1.09.272a2 2 0 0 1-2.425-1.455z" />
-            <path d="m6.158 8.633 1.114 4.456" />
+          <rect x="5" y="8" width="14" height="12" rx="4" />
+          <path d="M12 8V5M2 12v4m20-4v4m-13 1h6" />
+          <circle cx="12" cy="3" r="1" />
+          <g className="animated-icon__motion animated-icon__eyes">
+            <circle cx="9" cy="13" r="1" fill="currentColor" stroke="none" />
+            <circle cx="15" cy="13" r="1" fill="currentColor" stroke="none" />
           </g>
-          <path d="m16 21-3.105-6.21" />
-          <path d="m8 21 3.105-6.21" />
-          <circle cx="12" cy="13" r="2" />
         </>
       )}
       {name === "pull-request" && (
@@ -58,18 +66,44 @@ export function AnimatedIcon({
       )}
       {name === "code" && (
         <>
-          <g className="animated-icon__motion animated-icon__right">
-            <path d="m16 18 6-6-6-6" />
+          <rect x="3" y="4" width="18" height="16" rx="3" />
+          <path d="M3 8h18" />
+          <g className="animated-icon__motion animated-icon__prompt">
+            <path d="m7 11 3 3-3 3" />
           </g>
-          <g className="animated-icon__motion animated-icon__left">
-            <path d="m8 6-6 6 6 6" />
+          <g className="animated-icon__motion animated-icon__cursor">
+            <path d="M13 17h4" />
           </g>
         </>
       )}
       {name === "folder" && (
-        <g className="animated-icon__motion">
-          <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-        </g>
+        <>
+          <path d="M3 17V6a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v2" />
+          <g className="animated-icon__motion animated-icon__flap">
+            <path d="M5 11h16l-2 8H5a2 2 0 0 1-2-2Z" />
+          </g>
+        </>
+      )}
+      {(name === "sidebar-close" || name === "sidebar-open") && (
+        <>
+          <rect
+            x="3"
+            y="4"
+            width="6"
+            height="16"
+            rx="2"
+            fill="currentColor"
+            opacity="0.12"
+            stroke="none"
+          />
+          <rect x="3" y="4" width="18" height="16" rx="3" />
+          <path d="M9 4v16" />
+          <g className="animated-icon__motion">
+            <path
+              d={name === "sidebar-close" ? "m17 9-3 3 3 3" : "m13 9 3 3-3 3"}
+            />
+          </g>
+        </>
       )}
       {name === "refresh" && (
         <g className="animated-icon__motion">
