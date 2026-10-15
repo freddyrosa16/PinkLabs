@@ -1,0 +1,8 @@
+.venv
+.env
+.env.*
+!.env.example
+desktop/node_modules/
+desktop/dist/
+desktop/release/
+.DS_Store
