@@ -156,6 +156,22 @@ test("normalizes live endpoint shapes into the frontend contract", async () => {
   assert.equal(repo.refreshIncomplete, false);
 });
 
+test("open PR count includes loaded rows when GitHub search lags and retains larger totals", async () => {
+  const countEndpoint =
+    "search/issues?q=repo%3Afreddy%2FPinkLabs%20is%3Apr%20is%3Aopen&per_page=1";
+  const lagging = await service({
+    [countEndpoint]: { total_count: 0 },
+  }).getRepository("freddy/PinkLabs");
+  assert.equal(lagging.pulls.length, 1);
+  assert.equal(lagging.openPrCount, 1);
+
+  const largerTotal = await service({
+    [countEndpoint]: { total_count: 120 },
+  }).getRepository("freddy/PinkLabs");
+  assert.equal(largerTotal.pulls.length, 1);
+  assert.equal(largerTotal.openPrCount, 120);
+});
+
 test("missing optional resources remain absent and failed endpoints produce honest warnings", async () => {
   const unavailable = Object.assign(new Error("secret should not escape"), {
     status: 403,

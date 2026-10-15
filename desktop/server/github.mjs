@@ -548,7 +548,7 @@ export function createGitHubService({
       stars: metadata.stargazers_count || 0,
       forks: metadata.forks_count || 0,
       openPrCount: Number.isFinite(pullCount?.total_count)
-        ? pullCount.total_count
+        ? Math.max(pullCount.total_count, pulls.length)
         : pulls.length,
       viewerStarred: starred,
       commits,
