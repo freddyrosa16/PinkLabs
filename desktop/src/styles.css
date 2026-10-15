@@ -1271,10 +1271,6 @@ code {
   border: 1px solid #ffffff1c;
   border-radius: 18px;
   padding: 14px 14px 12px;
-  transition: border-color 120ms ease;
-}
-.composer:focus-within {
-  border-color: var(--line-strong);
 }
 .composer textarea {
   display: block;
