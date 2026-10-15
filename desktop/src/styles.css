@@ -245,7 +245,8 @@ code {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 500;
   padding: 0 3px;
 }
 .group-heading small {
@@ -326,23 +327,6 @@ code {
 .provider-icon.monochrome {
   filter: invert(0.85);
 }
-.sidebar-empty {
-  padding: 18px 10px;
-  color: var(--faint);
-  font-size: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.sidebar-empty > svg {
-  color: var(--faint);
-}
-.sidebar-empty button {
-  color: var(--muted);
-  text-align: left;
-  padding: 0;
-  font-size: 12px;
-}
 .sidebar-hint {
   font-size: 12px;
   color: var(--muted);
@@ -373,11 +357,9 @@ code {
   grid-column: 2;
   grid-row: 1;
   background: var(--canvas);
-  border: 1px solid var(--line);
-  border-right: 0;
-  border-bottom: 0;
-  border-radius: 8px 0 0 0;
-  margin-top: 5px;
+  border: 0;
+  border-radius: 0;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -2941,7 +2923,6 @@ h2 { font-size: 14px; }
 
 
 /* Give each working area its own rounded surface and room to breathe. */
-.main-content { border-radius: var(--radius-overlay) 0 0 0; }
 .repo-scroll { padding: 24px; }
 .repo-hero { padding: 4px 4px 28px; min-height: 126px; }
 .stats-strip {

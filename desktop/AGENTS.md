@@ -35,3 +35,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Add restrained Lucide-style icon gestures on hover and keyboard focus for common controls. Animate once and settle, honor reduced motion, preserve brand logos, and keep automatic refresh quiet.
 
 - Sidebar uses fresh message-plus, bot, terminal, and open-folder icons with animated panel toggles. Its edge is draggable with a bounded width, continuous movement, smooth full collapse/reopen, and a remembered expanded width. Preserve normal sidebar scrolling, keyboard resizing, reduced motion, and mobile drawer behavior.
+
+- Keep the main application pane flush with the top of the window: no inset top gap, outer border, or rounded upper-left corner on any view. Rounded cards inside the pane remain; the sidebar and header use single subtle dividers.
+
+- Projects and Sessions headings use readable 14px medium text. Both have a + action aligned at the right; Sessions + opens a new chat even when the group is collapsed. Keep an empty Sessions section quiet: no placeholder illustration, empty-state paragraph, or separate Start a chat link.
