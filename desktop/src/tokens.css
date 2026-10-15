@@ -33,14 +33,15 @@
   --diff-removed-bg: var(--negative-bg);
   --diff-added-gutter: #1b3823;
   --diff-removed-gutter: #472626;
-  /* Code uses cool names, warm values, and violet structure. Diff status stays green/red. */
-  --syntax-keyword: #c4a2f5;
-  --syntax-string: #e6c28b;
-  --syntax-number: #e9a17e;
-  --syntax-comment: #96a0b2;
-  --syntax-function: #82b7f5;
-  --syntax-type: #8bd5ca;
-  --syntax-property: #9fc9ed;
-  --syntax-tag: #82b7f5;
-  --syntax-meta: #c4a2f5;
+  /* Distinct syntax hues inspired by Codex's bundled code-editor palette.
+     Status greens/reds above remain independent of source-code token roles. */
+  --syntax-keyword: #f8a6c8;
+  --syntax-string: #83d197;
+  --syntax-number: #f1a275;
+  --syntax-comment: #a8a8a8;
+  --syntax-function: #b897f4;
+  --syntax-type: #b897f4;
+  --syntax-property: #f9dc78;
+  --syntax-tag: #63a8f8;
+  --syntax-meta: #63a8f8;
 }

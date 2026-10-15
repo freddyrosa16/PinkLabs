@@ -7,7 +7,6 @@ import {
   ChevronRightIcon,
   CodeIcon,
   FileDirectoryIcon,
-  GitPullRequestIcon,
   MarkGithubIcon,
   PlusIcon,
   SearchIcon,
@@ -18,9 +17,9 @@ import {
   TrashIcon,
   XIcon,
   CommentDiscussionIcon,
-  PencilIcon,
 } from "@primer/octicons-react";
 import { api, external } from "./api";
+import { AnimatedIcon } from "./AnimatedIcon";
 import { GitHubView } from "./GitHubView";
 import { PullRequestComposer } from "./PullRequestComposer";
 import {
@@ -206,11 +205,15 @@ export function App() {
     setUndoSession(deleted);
   }
   const nav = [
-    { id: "chat", label: "New Chat", icon: <PencilIcon /> },
-    { id: "agents", label: "Agents", icon: <TelescopeIcon /> },
-    { id: "pulls", label: "Pull Requests", icon: <GitPullRequestIcon /> },
+    { id: "chat", label: "New Chat", icon: <AnimatedIcon name="pencil" /> },
+    { id: "agents", label: "Agents", icon: <AnimatedIcon name="telescope" /> },
+    {
+      id: "pulls",
+      label: "Pull Requests",
+      icon: <AnimatedIcon name="pull-request" />,
+    },
     { id: "github", label: "GitHub", icon: <MarkGithubIcon /> },
-    { id: "ide", label: "IDE", icon: <CodeIcon /> },
+    { id: "ide", label: "IDE", icon: <AnimatedIcon name="code" /> },
   ];
   function sessionRow(s: Session) {
     return (
@@ -350,7 +353,7 @@ export function App() {
                       ) : (
                         <ChevronRightIcon size={12} />
                       )}
-                      <FileDirectoryIcon />
+                      <AnimatedIcon name="folder" />
                       <span>{p.name}</span>
                     </button>
                     <button

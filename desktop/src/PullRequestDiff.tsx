@@ -40,12 +40,14 @@ export function PullRequestDiff({
   number,
   headSha,
   base,
+  active,
   refreshVersion,
 }: {
   fullName: string;
   number: number;
   headSha: string;
   base: string;
+  active: boolean;
   refreshVersion: number;
 }) {
   const key = JSON.stringify([fullName, number, headSha, base]);
@@ -59,7 +61,9 @@ export function PullRequestDiff({
   const [selection, setSelection] = useState({ key: "", filename: "" });
   const codeViewport = useRef<HTMLDivElement>(null);
   const scrollScope = useRef(key);
-  const filePositions = useRef(new Map<string, { top: number; left: number }>());
+  const filePositions = useRef(
+    new Map<string, { top: number; left: number }>(),
+  );
   const [syntax, setSyntax] = useState<{
     parsed: ParsedDiff;
     filename: string;
@@ -122,12 +126,13 @@ export function PullRequestDiff({
       filePositions.current.clear();
       scrollScope.current = key;
     }
+    if (!active) return;
     const viewport = codeViewport.current;
     if (!viewport) return;
     const position = filename ? filePositions.current.get(filename) : undefined;
     viewport.scrollTop = position?.top ?? 0;
     viewport.scrollLeft = position?.left ?? 0;
-  }, [key, filename]);
+  }, [key, filename, active]);
   useEffect(() => {
     let current = true;
     if (!filename || !parsed?.rows.length) return;
@@ -153,23 +158,25 @@ export function PullRequestDiff({
       ? syntax.result.rows
       : null;
   const githubDiff = `https://github.com/${fullName}/pull/${number}/files`;
+  const refreshControl = (
+    <button
+      className="text-button"
+      disabled={visible.loading}
+      onClick={() => setRetry((value) => value + 1)}
+    >
+      <SyncIcon size={12} className={visible.loading ? "spin" : ""} />
+      Refresh files
+    </button>
+  );
 
   return (
     <section className="pr-diff" aria-label="Changed files">
-      <div className="pr-diff-header">
-        <h3>Changed files {visible.result && <span>{files.length}</span>}</h3>
-        <button
-          className="text-button"
-          disabled={visible.loading}
-          onClick={() => setRetry((value) => value + 1)}
-        >
-          <SyncIcon size={12} className={visible.loading ? "spin" : ""} />{" "}
-          Refresh files
-        </button>
-      </div>
+      {!files.length && <div className="pr-diff-header">{refreshControl}</div>}
       {visible.error && (
         <div className="pr-diff-notice" role="alert">
-          {visible.result && <p>Refresh failed. Showing the last loaded changes.</p>}
+          {visible.result && (
+            <p>Refresh failed. Showing the last loaded changes.</p>
+          )}
           <p>{visible.error}</p>
           <button
             className="button"
@@ -233,12 +240,15 @@ export function PullRequestDiff({
                       <small>Renamed from {file.previousFilename}</small>
                     )}
                   </div>
-                  <button
-                    className="text-button"
-                    onClick={() => external(file.url || githubDiff)}
-                  >
-                    View on GitHub <ArrowUpRightIcon size={12} />
-                  </button>
+                  <div className="pr-diff-file-actions">
+                    {refreshControl}
+                    <button
+                      className="text-button"
+                      onClick={() => external(file.url || githubDiff)}
+                    >
+                      View on GitHub <ArrowUpRightIcon size={12} />
+                    </button>
+                  </div>
                 </div>
                 {!parsed?.rows.length ? (
                   <p className="pr-diff-empty">
@@ -272,7 +282,8 @@ export function PullRequestDiff({
                       className="pr-diff-code-scroll"
                       ref={codeViewport}
                       onScroll={(event) => {
-                        if (!filename || scrollScope.current !== key) return;
+                        if (!active || !filename || scrollScope.current !== key)
+                          return;
                         filePositions.current.set(filename, {
                           top: event.currentTarget.scrollTop,
                           left: event.currentTarget.scrollLeft,

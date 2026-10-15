@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import {
   ArrowUpRightIcon,
   CheckCircleIcon,
@@ -80,6 +81,7 @@ export function PullRequestDetails({
   const [retry, setRetry] = useState(0);
   const [reviewRevision, setReviewRevision] = useState(0);
   const [tab, setTab] = useState<"overview" | "files">("overview");
+  const [filesOpened, setFilesOpened] = useState(false);
   const [method, setMethod] = useState<MergeMethod>("merge");
   const [confirming, setConfirming] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -93,10 +95,31 @@ export function PullRequestDetails({
   const busyCallback = useRef(busyChanged);
   const previousRefresh = useRef(refreshVersion);
   const actionsRef = useRef<HTMLDivElement>(null);
+  const overviewTabRef = useRef<HTMLButtonElement>(null);
+  const filesTabRef = useRef<HTMLButtonElement>(null);
   const pendingAnchor = useRef<ScrollAnchor | null>(null);
   function preserveActionPosition() {
     pendingAnchor.current?.cancel();
     pendingAnchor.current = captureScrollAnchor(actionsRef.current);
+  }
+  function selectTab(value: "overview" | "files") {
+    if (saving) return;
+    if (value === "files") setFilesOpened(true);
+    setTab(value);
+  }
+  function navigateTabs(event: KeyboardEvent<HTMLDivElement>) {
+    if (saving || event.altKey || event.ctrlKey || event.metaKey) return;
+    let next: "overview" | "files";
+    if (event.key === "Home") next = "overview";
+    else if (event.key === "End") next = "files";
+    else if (event.key === "ArrowLeft" || event.key === "ArrowRight")
+      next = tab === "overview" ? "files" : "overview";
+    else return;
+    event.preventDefault();
+    selectTab(next);
+    (next === "overview" ? overviewTabRef : filesTabRef).current?.focus({
+      preventScroll: true,
+    });
   }
   useLayoutEffect(() => {
     pendingAnchor.current?.restore();
@@ -348,46 +371,64 @@ export function PullRequestDetails({
               <code>{detail.branch}</code> → <code>{detail.base}</code>
             </span>
           </div>
-          <div className="pr-change-summary">
-            <span>
-              {detail.commits} {detail.commits === 1 ? "commit" : "commits"}
-            </span>
-            <span>{detail.changedFiles} files changed</span>
-            <span className="green">+{detail.additions}</span>
-            <span className="red">−{detail.deletions}</span>
-          </div>
-          <div
-            className="pr-detail-tabs"
-            role="tablist"
-            aria-label="Pull request details"
-          >
-            <button
-              role="tab"
-              id={`pr-overview-tab-${number}`}
-              aria-controls={`pr-overview-${number}`}
-              aria-selected={tab === "overview"}
-              className={tab === "overview" ? "active" : ""}
-              disabled={Boolean(saving)}
-              onClick={() => setTab("overview")}
+          <div className="pr-review-toolbar">
+            <div
+              className="pr-detail-tabs"
+              role="tablist"
+              aria-label="Pull request details"
+              onKeyDown={navigateTabs}
             >
-              Overview
-            </button>
-            <button
-              role="tab"
-              id={`pr-files-tab-${number}`}
-              aria-controls={`pr-files-${number}`}
-              aria-selected={tab === "files"}
-              className={tab === "files" ? "active" : ""}
-              disabled={Boolean(saving)}
-              onClick={() => setTab("files")}
-            >
-              Files changed <span>{detail.changedFiles}</span>
-            </button>
+              <button
+                ref={overviewTabRef}
+                type="button"
+                role="tab"
+                id={`pr-overview-tab-${number}`}
+                aria-controls={`pr-overview-${number}`}
+                aria-selected={tab === "overview"}
+                tabIndex={tab === "overview" ? 0 : -1}
+                className={tab === "overview" ? "active" : ""}
+                disabled={Boolean(saving)}
+                onClick={() => selectTab("overview")}
+              >
+                Overview
+              </button>
+              <button
+                ref={filesTabRef}
+                type="button"
+                role="tab"
+                id={`pr-files-tab-${number}`}
+                aria-controls={`pr-files-${number}`}
+                aria-selected={tab === "files"}
+                tabIndex={tab === "files" ? 0 : -1}
+                className={tab === "files" ? "active" : ""}
+                disabled={Boolean(saving)}
+                onClick={() => selectTab("files")}
+              >
+                Files changed <span>{detail.changedFiles}</span>
+              </button>
+            </div>
+            <div className="pr-change-summary">
+              <span>
+                {detail.commits} {detail.commits === 1 ? "commit" : "commits"}
+              </span>
+              <button
+                type="button"
+                className="pr-change-totals"
+                aria-label={`View code changes: ${detail.additions} additions and ${detail.deletions} deletions`}
+                aria-controls={`pr-files-${number}`}
+                disabled={Boolean(saving)}
+                onClick={() => selectTab("files")}
+              >
+                <span className="green">+{detail.additions}</span>
+                <span className="red">−{detail.deletions}</span>
+              </button>
+            </div>
           </div>
           <div
             role="tabpanel"
             id={`pr-overview-${number}`}
             aria-labelledby={`pr-overview-tab-${number}`}
+            tabIndex={0}
             hidden={tab !== "overview"}
           >
             <div className="pr-description markdown">
@@ -475,21 +516,24 @@ export function PullRequestDetails({
               busyChanged={setCommentSaving}
             />
           </div>
-          {tab === "files" && (
-            <div
-              role="tabpanel"
-              id={`pr-files-${number}`}
-              aria-labelledby={`pr-files-tab-${number}`}
-            >
+          <div
+            role="tabpanel"
+            id={`pr-files-${number}`}
+            aria-labelledby={`pr-files-tab-${number}`}
+            tabIndex={0}
+            hidden={tab !== "files"}
+          >
+            {filesOpened && (
               <PullRequestDiff
+                active={tab === "files"}
                 refreshVersion={reviewRevision}
                 fullName={fullName}
                 number={number}
                 headSha={detail.headSha}
                 base={detail.base}
               />
-            </div>
-          )}
+            )}
+          </div>
           {isOpen && (
             <div className="pr-merge-section pr-action-panels">
               <div

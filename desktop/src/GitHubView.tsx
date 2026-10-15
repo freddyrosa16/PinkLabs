@@ -27,6 +27,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import type { CloneMethod, Repository, Status } from "./types";
 import { ago, external } from "./api";
+import { AnimatedIcon } from "./AnimatedIcon";
 import { LanguageIcon } from "./LanguageIcon";
 import { PullRequestWorkspace } from "./PullRequestWorkspace";
 export function StatusIcon({ status }: { status: Status }) {
@@ -201,7 +202,11 @@ export function GitHubView({
             disabled={loading}
             onClick={refresh}
           >
-            <SyncIcon className={loading ? "spin" : ""} />
+            {loading ? (
+              <SyncIcon className="spin" />
+            ) : (
+              <AnimatedIcon name="refresh" />
+            )}
           </button>
           {repo && (
             <button className="button" onClick={() => external(repo.url)}>

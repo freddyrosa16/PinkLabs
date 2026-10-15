@@ -1618,9 +1618,7 @@ code {
   margin-bottom: 7px;
 }
 .pr-detail-tabs {
-  border-bottom: 1px solid var(--line-strong);
-  padding: 12px 0;
-  margin-bottom: 18px;
+  flex-wrap: wrap;
 }
 .pr-detail-tabs button {
   font-size: 13px;
@@ -1717,8 +1715,17 @@ code {
   display: block;
   color: var(--muted);
 }
-.pr-diff-file-header button {
+.pr-diff-file-actions {
   margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.pr-diff-file-header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
 }
 .pr-diff-code-scroll {
@@ -1874,9 +1881,32 @@ code {
   margin-top: 14px;
 }
 .pr-change-summary {
-  gap: 16px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--line-strong);
+  gap: 12px;
+  margin: 0;
+}
+.pr-review-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 16px 0 18px;
+}
+.pr-change-totals {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: var(--radius-control);
+  font-variant-numeric: tabular-nums;
+}
+.pr-change-totals:hover {
+  background: var(--surface-hover);
+}
+.pr-review-toolbar button {
+  white-space: nowrap;
+}
+.pr-detail-panel > [role="tabpanel"] .pr-diff {
+  margin-top: 0;
 }
 .pr-description.markdown {
   margin: 18px 0;
@@ -2925,7 +2955,7 @@ button.stat:hover { background: var(--surface-raised); }
 .pr-diff-layout { border-radius: var(--radius-panel); }
 .pr-diff-file-header { background: var(--surface-raised); }
 .pr-diff-files { background: var(--surface); }
-.pr-diff-code { color: var(--text); }
+.pr-diff-code { color: var(--text); font-size: 13px; line-height: 1.75; }
 .pr-diff-code .pr-syntax-keyword { color: var(--syntax-keyword); }
 .pr-diff-code .pr-syntax-string { color: var(--syntax-string); }
 .pr-diff-code .pr-syntax-number { color: var(--syntax-number); }
