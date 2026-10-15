@@ -14,7 +14,7 @@ Think of the interface as the dashboard of a car. It already has buttons, screen
 - **Sessions:** create a conversation, select Claude, OpenAI / Codex, or Grok, see that provider’s icon, stop the practice reply, reopen conversations, and delete them from either sidebar location. Use **Undo** in the deletion notification to restore a conversation you just removed.
 - **Running indicator:** a gray shimmer moves across a running conversation’s title. Reduced-motion preferences are respected.
 - **Review readability:** separated rounded panels, native system typography, and a shared green/red palette for statuses, change counts, and diff markers. PR and changed-file selection use neutral rounded highlights. Code diffs highlight keywords, strings, comments, and other syntax while preserving added/removed backgrounds. Merge/delete confirmation panels reserve their space, and the comment editor keeps the same height between writing, previewing, and status updates. Normal scrolling stays available.
-- **IDE:** in the desktop window, choose a project folder and open it in an installed editor. On macOS, Cursor is tried before VS Code; otherwise the folder opens using the system default.
+- **IDE:** in the desktop window, choose a project folder and open it in an installed editor. On macOS, Cursor is tried before VS Code; otherwise the folder is revealed in the system file manager without launching a folder’s application association.
 
 **Chat is clearly marked Practice mode.** It saves your message and shows a fixed example reply. It does not call any AI provider, spend model credits, or run your Python code. The Agents screen is a placeholder for the next design step.
 
@@ -65,13 +65,17 @@ GitHub service — server/github.mjs
 GitHub CLI → GitHub
 ```
 
-The screen never receives your GitHub credentials. Repository reads and explicit PR creation, comments, merging, and branch cleanup use a small set of validated actions. The browser preview requires a same-origin JSON request for every write. Native operations use named IPC actions, with sender, folder, and argument checks.
+The screen never receives your GitHub credentials. Repository reads and explicit PR creation, comments, merging, and branch cleanup use a small set of validated actions. The browser preview requires a loopback connection and matching local Host/Origin policy, plus a same-origin JSON request for every write. Native operations use named IPC actions, with sender, folder, and argument checks.
 
-`src/types.ts` describes the data exchanged by the interface and desktop bridge. `src/store.ts` manages projects and conversations. `src/App.tsx` contains the practice chat, navigation, and project flows. `src/GitHubView.tsx` renders repository information.
+`src/types.ts` describes the interface/desktop contract. `src/App.tsx` coordinates navigation; `WorkspaceDialogs.tsx` and `IDEView.tsx` own their flows. `usePracticeChat.ts` connects React to the independently tested practice controller, while `store.ts` validates workspace data and `useWorkspace.ts` handles persistence. `SafeMarkdown.tsx` and `rendering-policy.ts` share the content-rendering rules across repository and PR screens.
 
-Projects and conversations are saved in this app’s local storage on this device. Browser previews and the desktop app have separate storage; nothing synchronizes between them yet. Folder permissions are stored separately by Electron. Clearing app/browser data can remove saved conversations.
+README HTML is sanitized; PR descriptions and comments do not render raw HTML. Images load automatically only from explicitly allowed GitHub content hosts, with no referrer. Other README images have an explicit browser-opening action. Links allow HTTP(S) without embedded credentials, and no remote page gets access to the desktop bridge. Production Electron retains sandboxing, context isolation, sender validation, navigation/permission restrictions, and a restrictive content security policy. These controls reduce risk; they do not make arbitrary repository content or future backend integrations inherently trusted.
+
+Projects and conversations are saved in this app’s local storage on this device. Browser previews and the desktop app have separate storage; nothing synchronizes between them yet. Folder permissions are stored separately by Electron. Clearing app/browser data can remove saved conversations. Local storage is not an encrypted secrets store. Unsent chat drafts survive navigation within the app session, but not closing the app. If saved data is malformed or exceeds supported bounds, the app displays a persistent warning and pauses saving so the original value is not overwritten. New activity in that recovery window remains in memory until the stored data is repaired; there is no automatic destructive reset.
 
 ## Data limits
+
+- A local workspace supports up to 500 projects, 1,000 conversations, 1,000 messages per conversation, 10,000 total messages, and 2,000,000 serialized characters. Messages have a 64,000-character limit. Over-limit submissions keep the original draft; saved content is never silently truncated. Browser storage quotas can impose a lower practical limit.
 
 - The service fetches the latest seven commits on the repository’s default branch for CI. The Overview table displays five commit rows; **History** opens the full commit history on GitHub. CI combines commit statuses and check runs; unavailable checks do not become a passing result.
 - The open-PR count uses the successfully loaded list, with GitHub search as fallback for unavailable or capped lists. The PR workspace loads up to 100 recently updated PRs for each filter, including closed and merged history, with a notice when more exist.

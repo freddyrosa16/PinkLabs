@@ -4,8 +4,7 @@ import {
   CommentDiscussionIcon,
   SyncIcon,
 } from "@primer/octicons-react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { SafeMarkdown } from "./SafeMarkdown";
 import { ago, api, external } from "./api";
 import type { PullRequestComment } from "./types";
 
@@ -40,30 +39,6 @@ function orderComments(comments: PullRequestComment[]) {
     const difference = Date.parse(left.date) - Date.parse(right.date);
     return Number.isFinite(difference) ? difference : 0;
   });
-}
-function CommentMarkdown({ body }: { body: string }) {
-  return (
-    <Markdown
-      remarkPlugins={[remarkGfm]}
-      skipHtml
-      components={{
-        a: ({ href, children }) => (
-          <button
-            type="button"
-            className="markdown-link"
-            onClick={() => href && external(href)}
-          >
-            {children}
-          </button>
-        ),
-        img: ({ alt }) => (
-          <span className="muted">{alt ? `[Image: ${alt}]` : "[Image]"}</span>
-        ),
-      }}
-    >
-      {body}
-    </Markdown>
-  );
 }
 function reviewLabel(state?: string) {
   const labels: Record<string, string> = {
@@ -395,7 +370,11 @@ function CommentsPanel({
                     )}
                     <div className="pr-comment-body markdown">
                       {comment.body.trim() ? (
-                        <CommentMarkdown body={comment.body} />
+                        <SafeMarkdown
+                          linkBase={`https://github.com/${fullName}/`}
+                        >
+                          {comment.body}
+                        </SafeMarkdown>
                       ) : (
                         <p className="muted">
                           {comment.kind === "review"
@@ -476,7 +455,9 @@ function CommentsPanel({
           hidden={mode !== "preview"}
         >
           {draft.trim() ? (
-            <CommentMarkdown body={draft} />
+            <SafeMarkdown linkBase={`https://github.com/${fullName}/`}>
+              {draft}
+            </SafeMarkdown>
           ) : (
             <p className="muted">Nothing to preview yet.</p>
           )}

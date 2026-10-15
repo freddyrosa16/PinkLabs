@@ -1,3 +1,4 @@
+import { webContentUrl } from "./rendering-policy";
 import type {
   Repository,
   RepoSummary,
@@ -120,20 +121,11 @@ export const api = {
           body: JSON.stringify({ repo, number, ...input }),
         }),
 };
-export function external(url: string) {
-  try {
-    const parsed = new URL(url);
-    if (
-      !["https:", "http:"].includes(parsed.protocol) ||
-      parsed.username ||
-      parsed.password
-    )
-      return;
-    if (window.pink) window.pink.openExternal(url).catch(console.error);
-    else window.open(url, "_blank", "noopener,noreferrer");
-  } catch {
-    /* Ignore invalid repository links. */
-  }
+export function external(value: string) {
+  const url = webContentUrl(value);
+  if (!url) return;
+  if (window.pink) window.pink.openExternal(url).catch(console.error);
+  else window.open(url, "_blank", "noopener,noreferrer");
 }
 export function ago(date: string) {
   const hours = Math.max(0, (Date.now() - new Date(date).getTime()) / 3600000);

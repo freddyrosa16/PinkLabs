@@ -42,3 +42,5 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 - New Chat follows the supplied Codex, Cursor, and Claude references: a quiet welcome with one clear heading, a separate project/local-context strip, and a provider picker beside Send. Preserve honest local practice labeling until the Python backend is connected. Do not add decorative controls for unsupported voice, attachments, permissions, or model execution.
 - Follow-up: combine Codex’s simplicity with Claude’s centered opening layout. Keep the welcome and composer together in the middle for a new chat; once a conversation exists, dock the composer at the bottom. Omit starter chips and the duplicate central brand mark. Keep the input mounted across the first send so keyboard focus remains intact.
+
+- Follow-up identity preference: keep the centered new-chat opening, but make it distinct from Codex. Use a single warm-charcoal composer with project/provider controls inside, a restrained rose accent, and a left-aligned welcome. Avoid the stacked context strip and white circular send button. Preserve bottom docking after the first message.

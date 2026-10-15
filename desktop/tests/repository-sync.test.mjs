@@ -1,7 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRepositorySync } from "../src/repository-sync.ts";
-import { api } from "../src/api.ts";
+import { registerHooks } from "node:module";
+const apiUrl = new URL("../src/api.ts", import.meta.url).href;
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (context.parentURL === apiUrl && specifier === "./rendering-policy")
+      return nextResolve(
+        new URL("../src/rendering-policy.ts", import.meta.url).href,
+        context,
+      );
+    return nextResolve(specifier, context);
+  },
+});
+const { api } = await import(apiUrl);
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 const repository = (name = "owner/repo", overrides = {}) => ({

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { isIP } from "node:net";
 
 export function desktopPath(value, platform = process.platform) {
   if (platform !== "darwin") return value;
@@ -266,6 +267,22 @@ export function resolveAppAsset(value, root) {
 }
 
 export function isAllowedAPIRequest(request) {
+  // Host and Origin are client-supplied. Keep GitHub credentials behind the
+  // actual loopback connection even if a developer exposes Vite on the LAN.
+  const remote = request.socket.remoteAddress;
+  const address =
+    typeof remote === "string" && remote.startsWith("::ffff:")
+      ? remote.slice(7)
+      : remote;
+  if (
+    address !== "::1" &&
+    !(
+      typeof address === "string" &&
+      isIP(address) === 4 &&
+      address.startsWith("127.")
+    )
+  )
+    return false;
   const host = request.headers.host;
   const port = request.socket.localPort;
   if (

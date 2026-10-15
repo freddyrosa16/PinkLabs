@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import {
   ArrowUpIcon,
-  DeviceDesktopIcon,
   FileDirectoryIcon,
   SquareIcon,
 } from "@primer/octicons-react";
@@ -20,6 +19,7 @@ export function ChatComposer({
   projects,
   locked,
   running,
+  busyElsewhere,
   submit,
   stop,
 }: {
@@ -32,6 +32,7 @@ export function ChatComposer({
   projects: Project[];
   locked: boolean;
   running: boolean;
+  busyElsewhere: boolean;
   submit: () => void;
   stop: () => void;
 }) {
@@ -65,32 +66,6 @@ export function ChatComposer({
 
   return (
     <div className="composer-area">
-      <div className="composer-context">
-        <ComposerPicker
-          label="Conversation project"
-          value={projectId}
-          disabled={locked}
-          onChange={setProjectId}
-          options={[
-            {
-              value: "",
-              label: "No project",
-              icon: <FileDirectoryIcon size={16} />,
-            },
-            ...projects.map((p) => ({
-              value: p.id,
-              label: p.name,
-              icon: <FileDirectoryIcon size={16} />,
-            })),
-          ]}
-        />
-        <span
-          className="practice-context"
-          title="Practice replies are generated on this device. No model is connected."
-        >
-          <DeviceDesktopIcon size={15} /> Local practice
-        </span>
-      </div>
       <form
         ref={frame}
         className="composer"
@@ -103,7 +78,7 @@ export function ChatComposer({
           ref={input}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Ask a question or describe what you want to build…"
+          placeholder="An idea, a question, a place to begin…"
           aria-label="Message"
           aria-describedby="composer-disclosure"
           rows={3}
@@ -120,7 +95,24 @@ export function ChatComposer({
           }}
         />
         <div className="composer-toolbar">
-          <span className="composer-key-hint">Shift Enter for a new line</span>
+          <ComposerPicker
+            label="Conversation project"
+            value={projectId}
+            disabled={locked}
+            onChange={setProjectId}
+            options={[
+              {
+                value: "",
+                label: "No project",
+                icon: <FileDirectoryIcon size={16} />,
+              },
+              ...projects.map((p) => ({
+                value: p.id,
+                label: p.name,
+                icon: <FileDirectoryIcon size={16} />,
+              })),
+            ]}
+          />
           <ComposerPicker
             label="Model provider"
             value={provider}
@@ -145,7 +137,7 @@ export function ChatComposer({
           ) : (
             <button
               className="send-button"
-              disabled={!draft.trim()}
+              disabled={!draft.trim() || busyElsewhere}
               aria-label="Send message"
             >
               <ArrowUpIcon size={20} />
@@ -153,10 +145,14 @@ export function ChatComposer({
           )}
         </div>
       </form>
-      <p className="composer-note" id="composer-disclosure">
-        Practice mode · Messages stay on this device. No AI model is connected
-        yet.
-      </p>
+      <div className="composer-footer">
+        <p className="composer-note" id="composer-disclosure">
+          {busyElsewhere
+            ? "Another conversation is finishing a practice reply."
+            : "Local practice · No AI model connected yet."}
+        </p>
+        <span className="composer-key-hint">Shift Enter for a new line</span>
+      </div>
     </div>
   );
 }

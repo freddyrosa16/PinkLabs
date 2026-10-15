@@ -109,8 +109,6 @@ export function createApiMiddleware(
   },
 ) {
   return async function pinkApi(request, response, next) {
-    const url = new URL(request.url || "/", "http://127.0.0.1");
-    if (!url.pathname.startsWith("/api/")) return next();
     const send = (status, payload) => {
       response.writeHead(status, {
         "Content-Type": "application/json; charset=utf-8",
@@ -120,6 +118,15 @@ export function createApiMiddleware(
       });
       response.end(JSON.stringify(payload));
     };
+    let url;
+    try {
+      url = new URL(request.url || "/", "http://127.0.0.1");
+    } catch {
+      // HTTP accepts request-target bytes that the URL parser can reject.
+      // Keep malformed requests inside the response boundary, not an unhandled rejection.
+      return send(400, { error: "Invalid request address." });
+    }
+    if (!url.pathname.startsWith("/api/")) return next();
     if (!isAllowedAPIRequest(request))
       return send(403, {
         error: "GitHub data is only available to the local Pink Labs preview.",

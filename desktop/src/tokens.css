@@ -1,6 +1,8 @@
 :root {
   color-scheme: dark;
   --canvas: #191919;
+  --brand-rose: #e6a5bc;
+  --brand-rose-hover: #f1b9cd;
   --sidebar: #101010;
   --surface: #202020;
   --surface-raised: #262626;

@@ -216,7 +216,7 @@ export interface PinkBridge {
     method: CloneMethod,
   ) => Promise<{ canceled: boolean; path?: string }>;
   chooseFolder: () => Promise<string | null>;
-  openIDE: (folder: string) => Promise<void>;
+  openIDE: (folder: string) => Promise<"editor" | "file-manager">;
 }
 declare global {
   interface Window {
