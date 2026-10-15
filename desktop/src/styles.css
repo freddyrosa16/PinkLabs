@@ -1244,7 +1244,7 @@ code {
 }
 .chat-welcome {
   width: 100%;
-  max-width: 780px;
+  max-width: 720px;
   margin: 0 auto;
   padding: 0 30px 18px;
 }
@@ -1257,39 +1257,29 @@ code {
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
-.chat-welcome h1::before {
-  content: "";
-  display: block;
-  width: 24px;
-  height: 3px;
-  margin-bottom: 18px;
-  border-radius: var(--radius-pill);
-  background: var(--brand-rose);
-}
 .composer-area {
   flex-shrink: 0;
   padding: 0 28px 18px;
-  max-width: 780px;
+  max-width: 720px;
   width: 100%;
   min-width: 0;
   margin: 0 auto;
 }
 .composer {
   position: relative;
-  background: #242122;
+  background: var(--surface-raised);
   border: 1px solid #ffffff1c;
   border-radius: 18px;
-  padding: 20px 16px 14px;
-  box-shadow: 0 6px 24px #00000012;
+  padding: 14px 14px 12px;
   transition: border-color 120ms ease;
 }
 .composer:focus-within {
-  border-color: #e6a5bc70;
+  border-color: var(--line-strong);
 }
 .composer textarea {
   display: block;
   width: 100%;
-  min-height: 88px;
+  min-height: 44px;
   padding: 0 2px;
   border: 0;
   border-radius: 0;
@@ -1308,7 +1298,7 @@ code {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 14px;
+  margin-top: 8px;
 }
 .composer-toolbar > .composer-picker {
   min-width: 0;
@@ -1321,8 +1311,8 @@ code {
 .send-button {
   margin-left: auto;
   flex: 0 0 34px;
-  background: var(--brand-rose);
-  color: #25151c;
+  background: var(--text);
+  color: var(--canvas);
   height: 34px;
   width: 34px;
   border-radius: 11px;
@@ -1331,8 +1321,11 @@ code {
   justify-content: center;
 }
 .send-button:hover:not(:disabled) {
-  background: var(--brand-rose-hover);
-  color: #25151c;
+  background: #ffffff;
+  color: var(--canvas);
+}
+.composer button:focus-visible {
+  outline-color: var(--text-secondary);
 }
 .send-button:disabled {
   background: #ffffff0c;
@@ -2636,7 +2629,7 @@ select option {
     padding: 0 16px 18px;
   }
   .composer {
-    padding: 16px 12px 12px;
+    padding: 14px 12px 12px;
   }
   .ide-page {
     padding: 25px;
@@ -3058,7 +3051,7 @@ button.stat:hover { background: var(--surface-raised); }
   .chat-welcome { padding: 0 20px 16px; }
   .chat-welcome h1 { font-size: 20px; }
   .composer-area { padding-block: 8px; }
-  .composer textarea { min-height: 56px; }
+  .composer textarea { min-height: 44px; }
 }
 
 .workspace-storage-warning {

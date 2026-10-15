@@ -81,7 +81,7 @@ export function ChatComposer({
           placeholder="An idea, a question, a place to begin…"
           aria-label="Message"
           aria-describedby="composer-disclosure"
-          rows={3}
+          rows={2}
           onKeyDown={(e) => {
             if (
               e.key === "Enter" &&
