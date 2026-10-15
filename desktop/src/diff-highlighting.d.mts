@@ -7,7 +7,10 @@ export interface SyntaxToken {
 export interface HighlightedDiff {
   language: string | null;
   rows: SyntaxToken[][];
+  /** At least one returned token has a syntax role. */
   highlighted: boolean;
+  /** Some source is highlighted while another stream was left plain for the given reason. */
+  partial: boolean;
   reason:
     "unknown-language" | "shortened-line" | "too-large" | "unavailable" | null;
 }
