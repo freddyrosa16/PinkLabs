@@ -21,7 +21,7 @@
   /* One semantic palette for status, actions, change counts, and diffs. */
   --positive: #3fb950;
   --negative: #ff6b63;
-  --merged: #b2a3df;
+  --merged: #ad80ff;
   --positive-bg: #142b1c;
   --negative-bg: #382020;
   --positive-border: #2b6037;
@@ -33,13 +33,14 @@
   --diff-removed-bg: var(--negative-bg);
   --diff-added-gutter: #1b3823;
   --diff-removed-gutter: #472626;
-  --syntax-keyword: var(--negative);
-  --syntax-string: #a5d6ff;
-  --syntax-number: #79c0ff;
-  --syntax-comment: #9da6b0;
-  --syntax-function: #d2a8ff;
-  --syntax-type: #ffa657;
-  --syntax-property: #79c0ff;
-  --syntax-tag: var(--positive);
-  --syntax-meta: #79c0ff;
+  /* Code uses cool names, warm values, and violet structure. Diff status stays green/red. */
+  --syntax-keyword: #c4a2f5;
+  --syntax-string: #e6c28b;
+  --syntax-number: #e9a17e;
+  --syntax-comment: #96a0b2;
+  --syntax-function: #82b7f5;
+  --syntax-type: #8bd5ca;
+  --syntax-property: #9fc9ed;
+  --syntax-tag: #82b7f5;
+  --syntax-meta: #c4a2f5;
 }

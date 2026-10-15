@@ -164,6 +164,7 @@ export interface RepoSummary {
   description: string;
   private: boolean;
 }
+export type CloneMethod = "https" | "ssh" | "cli";
 export interface PinkBridge {
   repository: (fullName: string) => Promise<Repository>;
   repositories: () => Promise<RepoSummary[]>;
@@ -210,7 +211,10 @@ export interface PinkBridge {
   ) => Promise<MergePullRequestResult>;
   openExternal: (url: string) => Promise<void>;
   writeClipboard: (text: string) => Promise<void>;
-  clone: (fullName: string) => Promise<{ canceled: boolean; path?: string }>;
+  clone: (
+    fullName: string,
+    method: CloneMethod,
+  ) => Promise<{ canceled: boolean; path?: string }>;
   chooseFolder: () => Promise<string | null>;
   openIDE: (folder: string) => Promise<void>;
 }

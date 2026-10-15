@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { createCloneHandler } from "../server/clone.mjs";
 import {
   getRepository,
   listRepositories,
@@ -161,40 +162,12 @@ async function withPicker(operation) {
   }
 }
 
-async function cloneRepository(value) {
-  const repo = validateRepositoryName(value);
-  return withPicker(async () => {
-    const parent = await selectFolder(`Choose where to clone ${repo}`);
-    if (!parent) return { canceled: true };
-    const destination = path.join(await realpath(parent), repo.split("/")[1]);
-    try {
-      await lstat(destination);
-      throw new Error(
-        "That folder already exists. Choose another parent folder.",
-      );
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-    }
-    try {
-      await execute(
-        "git",
-        ["clone", "--", `https://github.com/${repo}.git`, destination],
-        {
-          timeout: 300_000,
-          maxBuffer: 4 * 1024 * 1024,
-          env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-        },
-      );
-    } catch (error) {
-      if (error.code === "ENOENT")
-        throw new Error("Git is not installed. Install Git and try again.");
-      throw new Error(
-        "Cloning failed. Check repository access and your connection. A partial folder may remain in the location you selected.",
-      );
-    }
-    return { canceled: false, path: await rememberFolder(destination) };
-  });
-}
+const cloneRepository = createCloneHandler({
+  execute,
+  selectFolder,
+  rememberFolder,
+  withPicker,
+});
 
 async function openIDE(value) {
   if (typeof value !== "string" || !path.isAbsolute(value))

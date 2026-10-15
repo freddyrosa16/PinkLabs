@@ -608,6 +608,33 @@ code {
   color: var(--muted);
   font-size: 12px;
 }
+.clone-method-tabs {
+  display: flex;
+  gap: 3px;
+  margin: 13px 0 10px;
+  padding: 3px;
+  background: var(--canvas);
+  border-radius: var(--radius-control);
+}
+.clone-method-tabs button {
+  flex: 1;
+  padding: 7px 5px;
+  border-radius: 7px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-size: 12px;
+}
+.clone-method-tabs button.active {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.clone-method-help {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  min-height: 36px;
+  margin: 9px 0;
+}
 .copy-field {
   display: flex;
   align-items: center;
@@ -1622,6 +1649,7 @@ code {
 .pr-diff-layout {
   display: grid;
   grid-template-columns: minmax(160px, 225px) minmax(0, 1fr);
+  height: clamp(340px, 65vh, 600px);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-panel);
   overflow: hidden;
@@ -1629,8 +1657,10 @@ code {
 .pr-diff-files {
   background: var(--canvas);
   border-right: 1px solid var(--line-strong);
-  max-height: 510px;
+  min-height: 0;
   overflow: auto;
+  overscroll-behavior: none;
+  scrollbar-gutter: stable;
 }
 .pr-diff-files button {
   display: grid;
@@ -1662,6 +1692,10 @@ code {
 }
 .pr-diff-panel {
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--canvas);
 }
 .pr-diff-file-header {
@@ -1673,6 +1707,7 @@ code {
   border-bottom: 1px solid var(--line-strong);
   font-size: 12px;
   background: var(--surface-raised);
+  flex-shrink: 0;
 }
 .pr-diff-file-header strong {
   font-family: var(--font-mono);
@@ -1687,8 +1722,12 @@ code {
   font-size: 12px;
 }
 .pr-diff-code-scroll {
-  max-height: 470px;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
+  overscroll-behavior: none;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
 }
 .pr-diff-code {
   border-spacing: 0;
@@ -1769,13 +1808,15 @@ code {
   font-size: 12px;
   line-height: 1.6;
   background: #b9945610;
+  flex-shrink: 0;
 }
 @media (max-width: 900px) {
   .pr-diff-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: 140px minmax(0, 1fr);
+    height: clamp(490px, 80vh, 700px);
   }
   .pr-diff-files {
-    max-height: 150px;
     border-right: 0;
     border-bottom: 1px solid var(--line-strong);
   }

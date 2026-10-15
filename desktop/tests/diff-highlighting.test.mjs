@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseUnifiedDiff } from "../src/diff-lines.mjs";
+import { common } from "lowlight";
 import {
   highlightDiffLines,
   languageForFilename,
@@ -24,6 +25,25 @@ test("language selection uses known filenames without guessing unknown source", 
   assert.equal(languageForFilename("images/asset.unknown"), null);
 });
 
+test("every mapped extension resolves to an installed common grammar", () => {
+  const extensions =
+    "js jsx mjs cjs ts tsx mts cts py pyi pyw c h cc cpp cxx hpp hh cs go rs java kt kts rb php swift m mm json jsonc yaml yml toml ini html htm xml svg vue css scss less sh bash zsh sql md markdown graphql gql lua pl pm r mk wat".split(
+      " ",
+    );
+  for (const filename of [
+    ...extensions.map((extension) => `file.${extension}`),
+    "Makefile",
+    "GNUmakefile",
+    ".bashrc",
+    ".bash_profile",
+    ".zshrc",
+    ".profile",
+  ]) {
+    const language = languageForFilename(filename);
+    assert.ok(language && Object.hasOwn(common, language), filename);
+  }
+});
+
 test("common code produces semantic tokens and preserves every source character", () => {
   const parsed = parseUnifiedDiff(
     '@@ -0,0 +1,3 @@\n+export const answer = 42;\n+const message = "Hello";\n+// explain',
@@ -43,6 +63,156 @@ test("common code produces semantic tokens and preserves every source character"
     parsed.rows,
     before,
     "highlighting must not change line numbers or diff metadata",
+  );
+});
+
+test("template expressions reset string color while keeping nested syntax roles", () => {
+  const source = "const label = `Hello ${user.name}, ${count + 1}!`;";
+  const parsed = parseUnifiedDiff(`@@ -0,0 +1 @@\n+${source}`);
+  const tokens = highlightDiffLines("example.ts", parsed.rows).rows[1];
+  assert.ok(role(tokens, "string", "Hello"));
+  assert.ok(
+    tokens.some(
+      (token) => token.className === "" && token.text.includes("${user.name}"),
+    ),
+  );
+  assert.ok(role(tokens, "number", "1"));
+  assert.ok(role(tokens, "string", "!`"));
+  assert.equal(text(tokens), source);
+});
+
+test("real PR6 TSX excerpts highlight JSX tags, attributes, strings, and both versions", () => {
+  // Exact hunks from 906c2f6 -- desktop/src/PullRequestDetails.tsx; no surrounding JSX closure.
+  const patch = [
+    "@@ -324,7 +324,7 @@ export function PullRequestDetails({",
+    "         <>",
+    '           <div className="pr-detail-title">',
+    "             {done ? (",
+    '-              <GitMergeIcon size={20} className="green" />',
+    '+              <GitMergeIcon size={20} className="pr-merged-icon" />',
+    "             ) : (",
+    "               <GitPullRequestIcon",
+    "                 size={20}",
+    "@@ -334,7 +334,7 @@ export function PullRequestDetails({",
+    "             <h3>{detail.title}</h3>",
+    "           </div>",
+    '           <div className="pr-detail-meta">',
+    '-            <span className="badge">',
+    '+            <span className={`badge${done ? " merged" : ""}`}>',
+    "               {done",
+    '                 ? "Merged"',
+    '                 : detail.state === "closed"',
+  ].join("\n");
+  const parsed = parseUnifiedDiff(patch);
+  const result = highlightDiffLines(
+    "desktop/src/PullRequestDetails.tsx",
+    parsed.rows,
+  );
+  for (const [index, line] of parsed.rows.entries()) {
+    if (line.text.includes("<GitMergeIcon")) {
+      assert.ok(role(result.rows[index], "tag", "GitMergeIcon"));
+      assert.ok(role(result.rows[index], "property", "className"));
+      assert.ok(role(result.rows[index], "property", "size"));
+      assert.ok(role(result.rows[index], "number", "20"));
+      assert.ok(
+        role(
+          result.rows[index],
+          "string",
+          line.kind === "deletion" ? '"green"' : '"pr-merged-icon"',
+        ),
+      );
+    }
+    if (line.text.includes("<span")) {
+      assert.ok(role(result.rows[index], "tag", "span"));
+      assert.ok(role(result.rows[index], "property", "className"));
+      assert.ok(
+        role(
+          result.rows[index],
+          "string",
+          line.kind === "deletion" ? '"badge"' : '" merged"',
+        ),
+      );
+    }
+  }
+  assert.equal(result.partial, false);
+  assert.deepEqual(
+    result.rows.map(text),
+    parsed.rows.map((row) => row.text),
+  );
+});
+
+test("JSX excerpts leave tag-like comments and quoted strings in their original roles", () => {
+  const lines = [
+    '/* <Fake className="comment">',
+    "still a comment </Fake> */",
+    'const quoted = "<Fake value=1 />";',
+    "const single = '<Another />';",
+    '<Real title="yes" />',
+  ];
+  const parsed = parseUnifiedDiff(
+    `@@ -0,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}`,
+  );
+  for (const filename of ["example.tsx", "example.jsx"]) {
+    const result = highlightDiffLines(filename, parsed.rows);
+    assert.ok(role(result.rows[1], "comment", "<Fake"));
+    assert.ok(role(result.rows[2], "comment", "</Fake>"));
+    assert.ok(role(result.rows[3], "string", "<Fake"));
+    assert.ok(role(result.rows[4], "string", "<Another"));
+    for (const line of result.rows.slice(1, 5))
+      assert.ok(!line.some((token) => token.className === "pr-syntax-tag"));
+    assert.ok(role(result.rows[5], "tag", "Real"));
+    assert.deepEqual(
+      result.rows.map(text),
+      parsed.rows.map((row) => row.text),
+    );
+  }
+});
+
+test("JSX attributes preserve nested object and callback expression syntax", () => {
+  const lines = [
+    '<Box value={{nested: {message: "yes"}}}',
+    ' onClick={() => { if (ready) { return "go"; } }}',
+    ' count={20} title="after" />',
+  ];
+  const parsed = parseUnifiedDiff(
+    `@@ -0,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}`,
+  );
+  const result = highlightDiffLines("example.tsx", parsed.rows);
+  assert.ok(role(result.rows[1], "tag", "Box"));
+  assert.ok(role(result.rows[1], "property", "message"));
+  assert.ok(role(result.rows[1], "string", '"yes"'));
+  assert.ok(role(result.rows[2], "keyword", "return"));
+  assert.ok(role(result.rows[2], "string", '"go"'));
+  assert.ok(role(result.rows[3], "property", "count"));
+  assert.ok(role(result.rows[3], "number", "20"));
+  assert.ok(role(result.rows[3], "string", '"after"'));
+  assert.deepEqual(
+    result.rows.map(text),
+    parsed.rows.map((row) => row.text),
+  );
+});
+
+test("TSX generic arrows do not start a tag or consume following code", () => {
+  const lines = [
+    "const first = <T,>(value: T) => value;",
+    "const next = <T extends Item>(value: T) => value;",
+    "const result = first<Item>(input);",
+    'const message = "after generics";',
+  ];
+  const parsed = parseUnifiedDiff(
+    `@@ -0,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}`,
+  );
+  const result = highlightDiffLines("example.tsx", parsed.rows);
+  assert.ok(
+    result.rows.every((line) =>
+      line.every((token) => token.className !== "pr-syntax-tag"),
+    ),
+  );
+  assert.ok(role(result.rows[2], "keyword", "extends"));
+  assert.ok(role(result.rows[4], "string", '"after generics"'));
+  assert.deepEqual(
+    result.rows.map(text),
+    parsed.rows.map((row) => row.text),
   );
 });
 
@@ -153,4 +323,62 @@ test("unknown, large, and shortened source falls back without losing text", () =
     shortened.rows.map((row) => row.text),
   );
   assert.equal(shortened.rows[1].truncated, true);
+});
+
+test("a shortened old line does not disable the new side or unrelated hunks", () => {
+  const parsed = parseUnifiedDiff(
+    `@@ -1,2 +1,2 @@\n-const before = "${"x".repeat(80)}";\n+const after = 2;\n tail();\n@@ -50 +50 @@\n-old();\n+const later = 3;`,
+    { maxLineLength: 32 },
+  );
+  const result = highlightDiffLines("example.js", parsed.rows);
+  assert.equal(result.highlighted, true);
+  assert.equal(result.partial, true);
+  assert.equal(result.reason, "shortened-line");
+  assert.ok(result.rows[1].every((token) => token.className === ""));
+  assert.ok(role(result.rows[2], "keyword", "const"));
+  assert.ok(role(result.rows[6], "keyword", "const"));
+  assert.deepEqual(
+    result.rows.map(text),
+    parsed.rows.map((row) => row.text),
+  );
+});
+
+test("oversized hunks leave smaller hunks highlighted within the shared work budget", () => {
+  const source = `const payload = "${"x".repeat(450)}";`;
+  const block = Array.from({ length: 80 }, () => `+${source}`).join("\n");
+  const parsed = parseUnifiedDiff(
+    `@@ -0,0 +1,80 @@\n${block}\n@@ -0,0 +200,80 @@\n${block}\n@@ -0,0 +500 @@\n+const final = 3;`,
+  );
+  const result = highlightDiffLines("large.js", parsed.rows);
+  assert.equal(result.highlighted, true);
+  assert.equal(result.partial, true);
+  assert.equal(result.reason, "too-large");
+  assert.ok(role(result.rows[1], "keyword", "const"));
+  assert.ok(
+    result.rows[82].every((token) => token.className === ""),
+    "second large hunk exceeds remaining budget",
+  );
+  assert.ok(
+    role(result.rows[163], "keyword", "const"),
+    "a later small hunk still fits",
+  );
+  assert.deepEqual(
+    result.rows.map(text),
+    parsed.rows.map((row) => row.text),
+  );
+});
+
+test("a skipped new stream leaves shared context plain instead of using old syntax", () => {
+  const parsed = parseUnifiedDiff(
+    `@@ -1,3 +1,3 @@\n-/* old comment\n+const huge = "${"x".repeat(80)}";\n const shared = 1;\n */`,
+    { maxLineLength: 32 },
+  );
+  const result = highlightDiffLines("example.js", parsed.rows);
+  assert.ok(role(result.rows[1], "comment", "old comment"));
+  assert.ok(result.rows[3].every((token) => token.className === ""));
+  assert.equal(result.partial, true);
+  assert.deepEqual(
+    result.rows.map(text),
+    parsed.rows.map((row) => row.text),
+  );
 });

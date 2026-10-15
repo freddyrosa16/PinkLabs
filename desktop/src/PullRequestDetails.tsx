@@ -482,10 +482,11 @@ export function PullRequestDetails({
               aria-labelledby={`pr-files-tab-${number}`}
             >
               <PullRequestDiff
-                key={reviewRevision}
+                refreshVersion={reviewRevision}
                 fullName={fullName}
                 number={number}
                 headSha={detail.headSha}
+                base={detail.base}
               />
             </div>
           )}

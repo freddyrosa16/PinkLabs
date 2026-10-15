@@ -53,7 +53,7 @@ await mkdir(stagingRoot, { recursive: true });
 
 // Explicit runtime allowlist: the Python project, .env files, dependencies,
 // browser-preview server, and source workspace are never copied into the app.
-for (const file of ["electron/main.mjs", "electron/preload.cjs", "server/github.mjs", "server/validation.mjs"]) {
+for (const file of ["electron/main.mjs", "electron/preload.cjs", "server/github.mjs", "server/validation.mjs", "server/clone.mjs"]) {
   const destination = path.join(stagingRoot, file);
   await mkdir(path.dirname(destination), { recursive: true });
   await copyFile(path.join(desktopRoot, file), destination);

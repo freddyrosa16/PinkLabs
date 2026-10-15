@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRightIcon,
   FileCodeIcon,
@@ -39,12 +39,16 @@ export function PullRequestDiff({
   fullName,
   number,
   headSha,
+  base,
+  refreshVersion,
 }: {
   fullName: string;
   number: number;
   headSha: string;
+  base: string;
+  refreshVersion: number;
 }) {
-  const key = JSON.stringify([fullName, number, headSha]);
+  const key = JSON.stringify([fullName, number, headSha, base]);
   const [load, setLoad] = useState<LoadState>({
     key: "",
     result: null,
@@ -53,6 +57,9 @@ export function PullRequestDiff({
   });
   const [retry, setRetry] = useState(0);
   const [selection, setSelection] = useState({ key: "", filename: "" });
+  const codeViewport = useRef<HTMLDivElement>(null);
+  const scrollScope = useRef(key);
+  const filePositions = useRef(new Map<string, { top: number; left: number }>());
   const [syntax, setSyntax] = useState<{
     parsed: ParsedDiff;
     filename: string;
@@ -60,7 +67,13 @@ export function PullRequestDiff({
   } | null>(null);
   useEffect(() => {
     let current = true;
-    setLoad({ key, result: null, loading: true, error: "" });
+    // Revalidate this revision without removing the reader's current file or viewport.
+    setLoad((previous) => ({
+      key,
+      result: previous.key === key ? previous.result : null,
+      loading: true,
+      error: "",
+    }));
     api
       .getPullRequestFiles(fullName, number, headSha)
       .then((result) => {
@@ -79,12 +92,17 @@ export function PullRequestDiff({
             ? cause.message
             : "Changed files could not be loaded. Try again."
         ).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "");
-        setLoad({ key, result: null, loading: false, error });
+        setLoad((previous) => ({
+          key,
+          result: previous.key === key ? previous.result : null,
+          loading: false,
+          error,
+        }));
       });
     return () => {
       current = false;
     };
-  }, [fullName, number, headSha, key, retry]);
+  }, [fullName, number, headSha, key, retry, refreshVersion]);
 
   // A changed prop hides old data before the effect runs, as well as ignoring late responses.
   const visible =
@@ -99,6 +117,17 @@ export function PullRequestDiff({
     [file?.patch],
   );
   const filename = file?.filename;
+  useLayoutEffect(() => {
+    if (scrollScope.current !== key) {
+      filePositions.current.clear();
+      scrollScope.current = key;
+    }
+    const viewport = codeViewport.current;
+    if (!viewport) return;
+    const position = filename ? filePositions.current.get(filename) : undefined;
+    viewport.scrollTop = position?.top ?? 0;
+    viewport.scrollLeft = position?.left ?? 0;
+  }, [key, filename]);
   useEffect(() => {
     let current = true;
     if (!filename || !parsed?.rows.length) return;
@@ -138,8 +167,9 @@ export function PullRequestDiff({
           Refresh files
         </button>
       </div>
-      {visible.error ? (
+      {visible.error && (
         <div className="pr-diff-notice" role="alert">
+          {visible.result && <p>Refresh failed. Showing the last loaded changes.</p>}
           <p>{visible.error}</p>
           <button
             className="button"
@@ -148,11 +178,12 @@ export function PullRequestDiff({
             Retry files
           </button>
         </div>
-      ) : visible.loading ? (
+      )}
+      {visible.loading && !visible.result ? (
         <div className="pr-diff-empty" role="status">
           <SyncIcon className="spin" size={16} /> Loading changed files…
         </div>
-      ) : !files.length ? (
+      ) : !visible.result && visible.error ? null : !files.length ? (
         <p className="pr-diff-empty">
           No changed files were returned for this pull request.
         </p>
@@ -239,6 +270,14 @@ export function PullRequestDiff({
                     )}
                     <div
                       className="pr-diff-code-scroll"
+                      ref={codeViewport}
+                      onScroll={(event) => {
+                        if (!filename || scrollScope.current !== key) return;
+                        filePositions.current.set(filename, {
+                          top: event.currentTarget.scrollTop,
+                          left: event.currentTarget.scrollLeft,
+                        });
+                      }}
                       tabIndex={0}
                       aria-label={`Diff for ${file.filename}`}
                     >

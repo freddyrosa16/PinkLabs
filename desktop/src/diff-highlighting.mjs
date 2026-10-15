@@ -1,6 +1,59 @@
 import { common, createLowlight } from "lowlight";
 
 const lowlight = createLowlight(common);
+
+// Normal JSX grouping expects surrounding value expressions and closing elements, which
+// diff hunks often omit. Recognize individual tags while keeping JS/TS parsing in braces.
+function jsxExcerptGrammar(base) {
+  return (api) => {
+    const language = common[base](api);
+    const expression = {
+      scope: "subst",
+      begin: /\{/,
+      end: /\}/,
+      keywords: language.keywords,
+      contains: [],
+    };
+    const fragment = { scope: "tag", match: /<\/?>/ };
+    const constraint = /\s+(?:extends|in)\b/y;
+    const tag = {
+      scope: "tag",
+      begin: /<\/?[A-Za-z][A-Za-z0-9._:-]*(?=[\s/>]|$)/,
+      end: /\/?>/,
+      contains: [
+        { scope: "attr", match: /[A-Za-z_:][A-Za-z0-9_.:-]*/ },
+        api.APOS_STRING_MODE,
+        api.QUOTE_STRING_MODE,
+        expression,
+      ],
+      "on:begin": (match, response) => {
+        if (match[0].startsWith("</")) return;
+        const afterName = match.index + match[0].length;
+        constraint.lastIndex = afterName;
+        // Avoid generic arrows (<T,>, <T extends Item>) and calls such as fn<Item>.
+        // The comma case does not match begin; these guards avoid consuming their rest as a tag.
+        if (
+          constraint.test(match.input) ||
+          (match.input[afterName] === ">" &&
+            /[\w$.\]]/.test(match.input[match.index - 1] ?? ""))
+        )
+          response.ignoreMatch();
+      },
+    };
+    for (const container of language.contains) {
+      const index = container.contains?.findIndex(
+        (mode) => mode.subLanguage === "xml" && mode.variants,
+      );
+      if (index >= 0) container.contains.splice(index, 1, fragment, tag);
+    }
+    language.contains.unshift(fragment, tag);
+    expression.contains = ["self", ...language.contains];
+    return { ...language, name: `${base} JSX excerpt`, aliases: [] };
+  };
+}
+lowlight.register("javascript-diff-jsx", jsxExcerptGrammar("javascript"));
+lowlight.register("typescript-diff-jsx", jsxExcerptGrammar("typescript"));
+
 export const MAX_HIGHLIGHT_CHARACTERS = 60_000;
 const MAX_HIGHLIGHT_TOKENS = 20_000;
 const languages = {
@@ -73,6 +126,8 @@ export function languageForFilename(filename) {
 
 function tokenRole(classes, inherited) {
   const has = (name) => classes.includes(`hljs-${name}`);
+  // Template expressions contain code; only their surrounding literal inherits string color.
+  if (has("subst")) return null;
   if (has("comment") || has("quote")) return "comment";
   if (has("keyword") || has("doctag") || has("selector-tag")) return "keyword";
   if (has("string") || has("regexp")) return "string";
@@ -133,53 +188,85 @@ export function highlightDiffLines(filename, rows) {
     language,
     rows: plain(),
     highlighted: false,
+    partial: false,
     reason,
   });
   if (!language) return fallback("unknown-language");
-  if (rows.some((row) => row.truncated)) return fallback("shortened-line");
-  // Context participates in both versions; count it twice before allocating source strings.
-  const size = rows.reduce(
-    (total, row) =>
-      total + (row.text.length + 1) * (row.kind === "context" ? 2 : 1),
-    0,
-  );
-  if (size > MAX_HIGHLIGHT_CHARACTERS || rows.length > 1_200)
-    return fallback("too-large");
+  if (rows.length > 1_200) return fallback("too-large");
+  const grammar = /\.[jt]sx$/i.test(filename)
+    ? `${language}-diff-jsx`
+    : language;
   const result = plain();
+  let remaining = MAX_HIGHLIGHT_CHARACTERS;
+  let reason = null;
   let group = [];
   function flushHunk() {
-    for (const side of ["old", "new"]) {
+    // Prefer the new stream for shared context. Old context is only needed to parse deletions.
+    for (const side of ["new", "old"]) {
+      if (
+        side === "old" &&
+        !group.some((index) => rows[index].kind === "deletion")
+      )
+        continue;
       const indexes = group.filter(
         (index) =>
           rows[index].kind === "context" ||
           rows[index].kind === (side === "old" ? "deletion" : "addition"),
       );
       if (!indexes.length) continue;
-      const source = indexes.map((index) => rows[index].text).join("\n");
-      const highlighted = highlightLines(source, language);
-      if (highlighted.length !== indexes.length)
-        throw new Error("Syntax line count changed");
-      indexes.forEach((index, position) => {
-        const tokens = highlighted[position];
-        if (tokens.map((token) => token.text).join("") !== rows[index].text)
+      // A missing line tail can change all following syntax in this stream, not other hunks/sides.
+      if (indexes.some((index) => rows[index].truncated)) {
+        reason ??= "shortened-line";
+        continue;
+      }
+      const size = indexes.reduce(
+        (total, index) => total + rows[index].text.length + 1,
+        0,
+      );
+      if (size > remaining) {
+        reason ??= "too-large";
+        continue;
+      }
+      // Charge both versions against one budget, including work that later fails validation.
+      remaining -= size;
+      try {
+        const source = indexes.map((index) => rows[index].text).join("\n");
+        const highlighted = highlightLines(source, grammar);
+        if (
+          highlighted.length !== indexes.length ||
+          indexes.some(
+            (index, position) =>
+              highlighted[position].map((token) => token.text).join("") !==
+              rows[index].text,
+          )
+        )
           throw new Error("Syntax text changed");
-        // Deletions use the old stream; additions and shared context use the new stream.
-        if (side === "new" || rows[index].kind === "deletion")
-          result[index] = tokens;
-      });
+        indexes.forEach((index, position) => {
+          // Never substitute old-side colors for shared context when the new side was skipped.
+          if (side === "new" || rows[index].kind === "deletion")
+            result[index] = highlighted[position];
+        });
+      } catch {
+        reason ??= "unavailable";
+      }
     }
     group = [];
   }
-  try {
-    rows.forEach((row, index) => {
-      if (row.kind === "hunk") flushHunk();
-      else if (["context", "addition", "deletion"].includes(row.kind))
-        group.push(index);
-      // No-newline metadata is not source and must not break an otherwise contiguous hunk.
-    });
-    flushHunk();
-    return { language, rows: result, highlighted: true, reason: null };
-  } catch {
-    return fallback("unavailable");
-  }
+  rows.forEach((row, index) => {
+    if (row.kind === "hunk") flushHunk();
+    else if (["context", "addition", "deletion"].includes(row.kind))
+      group.push(index);
+    // No-newline metadata is not source and must not break an otherwise contiguous hunk.
+  });
+  flushHunk();
+  const highlighted = result.some((line) =>
+    line.some((token) => token.className),
+  );
+  return {
+    language,
+    rows: result,
+    highlighted,
+    partial: highlighted && reason !== null,
+    reason,
+  };
 }
