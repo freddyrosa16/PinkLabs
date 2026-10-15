@@ -1,7 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { CheckIcon, ChevronDownIcon } from "@primer/octicons-react";
+import { positionComposerMenu } from "./composer-menu-position";
+import type { ComposerMenuPosition } from "./composer-menu-position";
 import "./composer-picker.css";
 
 interface ComposerPickerProps {
@@ -16,13 +18,7 @@ interface ComposerPickerProps {
   onChange: (value: string) => void;
   disabled?: boolean;
   align?: "left" | "right";
-}
-
-interface MenuPosition {
-  left: number;
-  bottom: number;
-  width: number;
-  maxHeight: number;
+  composerRef: RefObject<HTMLFormElement | null>;
 }
 
 export function ComposerPicker({
@@ -32,6 +28,7 @@ export function ComposerPicker({
   onChange,
   disabled = false,
   align = "left",
+  composerRef,
 }: ComposerPickerProps) {
   const id = useId();
   const menuId = `${id}-options`;
@@ -40,7 +37,7 @@ export function ComposerPicker({
   const optionElements = useRef<(HTMLDivElement | null)[]>([]);
   const [open, setOpen] = useState(false);
   const [activeValue, setActiveValue] = useState(value);
-  const [position, setPosition] = useState<MenuPosition | null>(null);
+  const [position, setPosition] = useState<ComposerMenuPosition | null>(null);
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selected = options[selectedIndex];
   const activeIndex = Math.max(
@@ -116,46 +113,52 @@ export function ComposerPicker({
     if (!expanded) return;
     function measure() {
       const rect = trigger.current?.getBoundingClientRect();
-      if (!rect) return;
-      const inset = 12;
-      const width = Math.min(
-        320,
-        Math.max(240, rect.width),
-        window.innerWidth - inset * 2,
-      );
-      const idealLeft = align === "right" ? rect.right - width : rect.left;
-      const left = Math.max(
-        inset,
-        Math.min(idealLeft, window.innerWidth - width - inset),
-      );
-      const bottom = Math.max(
-        inset,
-        Math.min(window.innerHeight - rect.top + 8, window.innerHeight - inset),
-      );
-      const maxHeight = Math.max(
-        0,
-        Math.min(320, window.innerHeight - bottom - inset),
-      );
+      const boundary = composerRef.current?.getBoundingClientRect();
+      const list = menu.current;
+      if (!rect || !boundary || !list) return;
+      const visualViewport = window.visualViewport;
+      const next = positionComposerMenu({
+        trigger: rect,
+        composer: boundary,
+        viewport: {
+          top: visualViewport?.offsetTop ?? 0,
+          left: visualViewport?.offsetLeft ?? 0,
+          width: visualViewport?.width ?? window.innerWidth,
+          height: visualViewport?.height ?? window.innerHeight,
+        },
+        layoutHeight: window.innerHeight,
+        menuHeight: list.scrollHeight + 2,
+        align,
+      });
       setPosition((previous) =>
-        previous?.left === left &&
-        previous.bottom === bottom &&
-        previous.width === width &&
-        previous.maxHeight === maxHeight
+        previous?.left === next.left &&
+        previous.top === next.top &&
+        previous.bottom === next.bottom &&
+        previous.width === next.width &&
+        previous.maxHeight === next.maxHeight
           ? previous
-          : { left, bottom, width, maxHeight },
+          : next,
       );
     }
     measure();
     const observer = new ResizeObserver(measure);
     if (trigger.current) observer.observe(trigger.current);
+    if (composerRef.current) observer.observe(composerRef.current);
+    const workspace = composerRef.current?.closest(".chat-workspace");
+    if (workspace) observer.observe(workspace);
+    if (menu.current) observer.observe(menu.current);
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
+    window.visualViewport?.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("scroll", measure);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
+      window.visualViewport?.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("scroll", measure);
     };
-  }, [expanded, align]);
+  }, [expanded, align, composerRef, options]);
 
   useLayoutEffect(() => {
     if (!expanded || !position) return;
@@ -224,7 +227,6 @@ export function ComposerPicker({
         )}
       </button>
       {expanded &&
-        position &&
         createPortal(
           <div
             ref={menu}
@@ -232,7 +234,15 @@ export function ComposerPicker({
             role="listbox"
             aria-label={label}
             className="composer-picker-menu"
-            style={position}
+            data-placement={position?.top === undefined ? "above" : "below"}
+            style={
+              position
+                ? {
+                    ...position,
+                    visibility: position.maxHeight < 24 ? "hidden" : undefined,
+                  }
+                : { visibility: "hidden" }
+            }
           >
             {options.map((option, index) => (
               <div

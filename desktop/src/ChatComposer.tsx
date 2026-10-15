@@ -96,6 +96,7 @@ export function ChatComposer({
         />
         <div className="composer-toolbar">
           <ComposerPicker
+            composerRef={frame}
             label="Conversation project"
             value={projectId}
             disabled={locked}
@@ -114,6 +115,7 @@ export function ChatComposer({
             ]}
           />
           <ComposerPicker
+            composerRef={frame}
             label="Model provider"
             value={provider}
             disabled={locked}
