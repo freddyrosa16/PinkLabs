@@ -6,7 +6,6 @@ import {
   type CSSProperties,
 } from "react";
 import {
-  ArrowUpIcon,
   ArrowUpRightIcon,
   CheckCircleIcon,
   ChevronDownIcon,
@@ -16,13 +15,14 @@ import {
   MarkGithubIcon,
   PlusIcon,
   SearchIcon,
-  SquareIcon,
   TelescopeIcon,
   TrashIcon,
   XIcon,
 } from "@primer/octicons-react";
 import { api, external } from "./api";
 import { AnimatedIcon } from "./AnimatedIcon";
+import { ChatComposer } from "./ChatComposer";
+import { providers, ProviderIcon } from "./providers";
 import { GitHubView } from "./GitHubView";
 import { PullRequestComposer } from "./PullRequestComposer";
 import {
@@ -36,21 +36,6 @@ import {
 import type { Provider, RepoSummary } from "./types";
 import { useRepository } from "./useRepository";
 import { useSidebar } from "./useSidebar";
-const providers: { id: Provider; name: string; asset: string }[] = [
-  { id: "claude", name: "Claude", asset: "claude-color.svg" },
-  { id: "openai", name: "OpenAI / Codex", asset: "openai.svg" },
-  { id: "grok", name: "Grok", asset: "grok.svg" },
-];
-function ProviderIcon({ provider }: { provider: Provider }) {
-  const p = providers.find((p) => p.id === provider)!;
-  return (
-    <img
-      className={`provider-icon ${provider === "claude" ? "" : "monochrome"}`}
-      src={`./providers/${p.asset}`}
-      alt={p.name}
-    />
-  );
-}
 type Modal =
   | { type: "repository" }
   | { type: "project" }
@@ -142,6 +127,7 @@ export function App() {
     [],
   );
   const session = workspace.sessions.find((s) => s.id === activeSession);
+  const chatProject = workspace.projects.find((p) => p.id === projectId);
   useEffect(() => {
     messageEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [session?.messages.length, running]);
@@ -601,138 +587,59 @@ export function App() {
           />
         ) : view === "chat" ? (
           <>
-            <header className="topbar">
-              <span className="view-title">
-                {session?.title || "New conversation"}
-              </span>
-              <span className="preview-badge">Practice mode</span>
+            <header className="topbar chat-topbar">
+              {session && <span className="view-title">{session.title}</span>}
             </header>
-            <div className="chat-area">
-              {!session ? (
-                <div className="chat-welcome">
-                  <span className="welcome-mark">
-                    P<span>·</span>
-                  </span>
-                  <h1>A little idea. A place to start.</h1>
-                  <p>Make room for what you’re building.</p>
-                  <div className="suggestions">
-                    {[
-                      "Plan my agent’s first task",
-                      "Think through an app idea",
-                      "Break down a Python concept",
-                    ].map((t) => (
-                      <button key={t} onClick={() => setDraft(t)}>
-                        {t}
-                        <ArrowUpRightIcon size={13} />
-                      </button>
-                    ))}
+            <div className={`chat-workspace${session ? "" : " is-new"}`}>
+              <div className="chat-area">
+                {!session ? (
+                  <div className="chat-welcome">
+                    <h1>
+                      {chatProject
+                        ? `What should we build in ${chatProject.name}?`
+                        : "What would you like to build?"}
+                    </h1>
                   </div>
-                </div>
-              ) : (
-                <div className="messages">
-                  {session.messages.map((m) => (
-                    <div className={`message ${m.role}`} key={m.id}>
-                      {m.role === "assistant" && (
-                        <ProviderIcon provider={session.provider} />
-                      )}
-                      <div>
-                        <span className="message-label">
-                          {m.role === "user" ? "You" : "Practice assistant"}
-                        </span>
-                        <p>{m.text}</p>
+                ) : (
+                  <div className="messages">
+                    {session.messages.map((m) => (
+                      <div className={`message ${m.role}`} key={m.id}>
+                        {m.role === "assistant" && (
+                          <ProviderIcon provider={session.provider} />
+                        )}
+                        <div>
+                          <span className="message-label">
+                            {m.role === "user" ? "You" : "Practice assistant"}
+                          </span>
+                          <p>{m.text}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {running === session.id && (
-                    <div className="message assistant">
-                      <ProviderIcon provider={session.provider} />
-                      <span className="shimmer" role="status">
-                        Working on your practice reply…
-                      </span>
-                    </div>
-                  )}
-                  <div ref={messageEnd} />
-                </div>
-              )}
-            </div>
-            <div className="composer-area">
-              <form
-                className="composer"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  submit();
-                }}
-              >
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder="What are you working on?"
-                  aria-label="Message"
-                  onKeyDown={(e) => {
-                    if (
-                      e.key === "Enter" &&
-                      !e.shiftKey &&
-                      !e.nativeEvent.isComposing
-                    ) {
-                      e.preventDefault();
-                      submit();
-                    }
-                  }}
-                />
-                <div className="composer-toolbar">
-                  <div className="provider-select">
-                    <ProviderIcon provider={session?.provider || provider} />
-                    <select
-                      aria-label="Model provider"
-                      value={session?.provider || provider}
-                      disabled={!!session}
-                      onChange={(e) => setProvider(e.target.value as Provider)}
-                    >
-                      {providers.map((p) => (
-                        <option value={p.id} key={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <select
-                    className="project-picker"
-                    aria-label="Conversation project"
-                    value={session?.projectId || projectId}
-                    disabled={!!session}
-                    onChange={(e) => setProjectId(e.target.value)}
-                  >
-                    <option value="">No project</option>
-                    {workspace.projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
                     ))}
-                  </select>
-                  {running ? (
-                    <button
-                      className="send-button stop"
-                      type="button"
-                      onClick={stop}
-                      aria-label="Stop reply"
-                    >
-                      <SquareIcon />
-                    </button>
-                  ) : (
-                    <button
-                      className="send-button"
-                      disabled={!draft.trim()}
-                      aria-label="Send message"
-                    >
-                      <ArrowUpIcon size={20} />
-                    </button>
-                  )}
-                </div>
-              </form>
-              <p className="composer-note">
-                Practice replies stay on this device. Your Python agent will
-                connect here.
-              </p>
+                    {running === session.id && (
+                      <div className="message assistant">
+                        <ProviderIcon provider={session.provider} />
+                        <span className="shimmer" role="status">
+                          Working on your practice reply…
+                        </span>
+                      </div>
+                    )}
+                    <div ref={messageEnd} />
+                  </div>
+                )}
+              </div>
+              <ChatComposer
+                draft={draft}
+                setDraft={setDraft}
+                provider={session?.provider || provider}
+                setProvider={setProvider}
+                projectId={session ? session.projectId || "" : projectId}
+                setProjectId={setProjectId}
+                projects={workspace.projects}
+                locked={!!session}
+                running={!!running}
+                submit={submit}
+                stop={stop}
+              />
             </div>
           </>
         ) : view === "agents" ? (

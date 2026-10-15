@@ -39,3 +39,6 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Keep the main application pane flush with the top of the window: no inset top gap, outer border, or rounded upper-left corner on any view. Rounded cards inside the pane remain; the sidebar and header use single subtle dividers.
 
 - Projects and Sessions headings use readable 14px medium text. Both have a + action aligned at the right; Sessions + opens a new chat even when the group is collapsed. Keep an empty Sessions section quiet: no placeholder illustration, empty-state paragraph, or separate Start a chat link.
+
+- New Chat follows the supplied Codex, Cursor, and Claude references: a quiet welcome with one clear heading, a separate project/local-context strip, and a provider picker beside Send. Preserve honest local practice labeling until the Python backend is connected. Do not add decorative controls for unsupported voice, attachments, permissions, or model execution.
+- Follow-up: combine Codex’s simplicity with Claude’s centered opening layout. Keep the welcome and composer together in the middle for a new chat; once a conversation exists, dock the composer at the bottom. Omit starter chips and the duplicate central brand mark. Keep the input mounted across the first send so keyboard focus remains intact.
