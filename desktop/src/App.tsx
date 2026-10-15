@@ -22,6 +22,7 @@ import {
 } from "@primer/octicons-react";
 import { api, external } from "./api";
 import { GitHubView } from "./GitHubView";
+import { PullRequestComposer } from "./PullRequestComposer";
 import {
   newWorkspace,
   readWorkspace,
@@ -59,9 +60,9 @@ export function App() {
   const [view, setView] = useState("github");
   const [tab, setTab] = useState("overview");
   const [sidebar, setSidebar] = useState(true);
-  const { repo, loading, error, refresh, refreshIfStale } = useRepository(
-    workspace.repo,
-  );
+  const [composerRepo, setComposerRepo] = useState<string | null>(null);
+  const { repo, loading, error, refresh, refreshIfStale, refreshAfterChange } =
+    useRepository(workspace.repo, view === "github" || view === "pulls");
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [sessionsOpen, setSessionsOpen] = useState(true);
   const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
@@ -448,7 +449,7 @@ export function App() {
           {repo && (
             <button
               className="icon-button"
-              title={`Synced ${new Date(repo.fetchedAt).toLocaleTimeString()} · Checks every 30s while active`}
+              title={`Last checked ${new Date(repo.fetchedAt).toLocaleTimeString()}`}
               disabled={loading}
               onClick={refresh}
             >
@@ -472,6 +473,7 @@ export function App() {
             repo={repo}
             loading={loading}
             error={error}
+            createPull={() => repo && setComposerRepo(repo.fullName)}
             tab={view === "pulls" ? "pulls" : tab}
             setTab={(t) => {
               setView("github");
@@ -658,6 +660,20 @@ export function App() {
           </>
         )}
       </main>
+      {repo && (
+        <PullRequestComposer
+          key={repo.fullName}
+          fullName={repo.fullName}
+          defaultBranch={repo.branch}
+          open={composerRepo === repo.fullName}
+          close={() => setComposerRepo(null)}
+          created={(pull) => {
+            notify(`Pull request #${pull.number} is on GitHub.`);
+            setView("pulls");
+            void refreshAfterChange();
+          }}
+        />
+      )}
       {modal && (
         <ModalDialog
           title={

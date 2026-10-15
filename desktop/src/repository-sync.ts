@@ -1,6 +1,6 @@
 import type { Repository } from "./types";
 
-export const REPOSITORY_POLL_MS = 30_000;
+export const REPOSITORY_POLL_MS = 2 * 60_000;
 const MIN_REFRESH_GAP_MS = 5_000;
 const MAX_RETRY_MS = 5 * 60_000;
 
@@ -52,18 +52,23 @@ export function createRepositorySync({
     }, delay);
   };
 
-  function refresh(manual = true): Promise<void> {
+  function runRefresh(manual: boolean, force: boolean): Promise<void> {
     if (disposed) return Promise.resolve();
-    if (inFlight) return inFlight;
-    if (!manual && !active) return Promise.resolve();
+    if (inFlight) {
+      if (manual && !state.loading) publish({ ...state, loading: true });
+      return inFlight;
+    }
+    if (!force && !active) return Promise.resolve();
     const wait = Math.max(lastAttempt + MIN_REFRESH_GAP_MS, retryAt) - now();
-    if (!manual && wait > 0) {
+    if (!force && wait > 0) {
       schedule(wait);
       return Promise.resolve();
     }
     cancelTimer();
     lastAttempt = now();
-    publish({ ...state, loading: true });
+    // Routine checks keep the current screen quiet. A user's explicit refresh
+    // still gets feedback, as does the initial load before any data is available.
+    if (manual || !state.repo) publish({ ...state, loading: true });
     inFlight = Promise.resolve()
       .then(load)
       .then((repo) => {
@@ -100,9 +105,22 @@ export function createRepositorySync({
     return inFlight;
   }
 
+  function refresh(manual = true) {
+    return runRefresh(manual, manual);
+  }
+
+  async function refreshAfterChange() {
+    // An existing read may have captured the repository before the mutation.
+    // Wait for it, then request fresh data without an overlapping read or spinner.
+    if (inFlight) await inFlight;
+    if (disposed) return;
+    return runRefresh(false, true);
+  }
+
   void refresh();
   return {
     refresh,
+    refreshAfterChange,
     setActive(next: boolean) {
       if (disposed || next === active) return;
       active = next;

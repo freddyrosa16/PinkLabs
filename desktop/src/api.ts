@@ -1,7 +1,14 @@
-import type { Repository, RepoSummary } from "./types";
+import type {
+  Repository,
+  RepoSummary,
+  BranchSelection,
+  BranchComparison,
+  PullRequestInput,
+  PullRequest,
+} from "./types";
 const pendingRepositories = new Map<string, Promise<Repository>>();
-async function get<T>(path: string): Promise<T> {
-  const response = await fetch(path);
+async function get<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(path, options);
   const data = await response.json();
   if (!response.ok)
     throw new Error(data.error || "GitHub could not be reached. Try again.");
@@ -23,6 +30,24 @@ export const api = {
     window.pink
       ? window.pink.repositories()
       : get<RepoSummary[]>("/api/repositories"),
+  listBranches: (repo: string) =>
+    window.pink
+      ? window.pink.listBranches(repo)
+      : get<string[]>(`/api/branches?${new URLSearchParams({ repo })}`),
+  compareBranches: (repo: string, selection: BranchSelection) =>
+    window.pink
+      ? window.pink.compareBranches(repo, selection)
+      : get<BranchComparison>(
+          `/api/compare?${new URLSearchParams({ repo, ...selection })}`,
+        ),
+  createPullRequest: (repo: string, input: PullRequestInput) =>
+    window.pink
+      ? window.pink.createPullRequest(repo, input)
+      : get<PullRequest>("/api/pulls", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo, ...input }),
+        }),
 };
 export function external(url: string) {
   try {

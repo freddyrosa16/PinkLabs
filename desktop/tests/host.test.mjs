@@ -178,7 +178,11 @@ test("custom protocol resolves only assets under the built client directory", ()
   assert.equal(containedPath(root, path.join(root, "../secret")), false);
 });
 
-function requestAPI(port, pathname, { method = "GET", headers = {} } = {}) {
+function requestAPI(
+  port,
+  pathname,
+  { method = "GET", headers = {}, body } = {},
+) {
   return new Promise((resolve, reject) => {
     const request = http.request(
       { hostname: "127.0.0.1", port, path: pathname, method, headers },
@@ -198,7 +202,7 @@ function requestAPI(port, pathname, { method = "GET", headers = {} } = {}) {
       },
     );
     request.on("error", reject);
-    request.end();
+    request.end(body);
   });
 }
 
@@ -276,4 +280,214 @@ test("local HTTP API returns repository data and blocks cross-origin reads and w
   );
   assert.equal((await requestAPI(port, "/api/clone")).status, 404);
   assert.deepEqual(seen, ["freddyrosa16/PinkLabs"]);
+});
+
+async function serveAPI(t, services) {
+  const middleware = createApiMiddleware(services);
+  const server = http.createServer((request, response) =>
+    middleware(request, response, () => {
+      response.writeHead(404);
+      response.end("{}");
+    }),
+  );
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  return server.address().port;
+}
+
+test("local PR API forwards branch comparisons and one validated JSON creation", async (t) => {
+  const calls = [];
+  const pull = { number: 2, title: "Add PR flow", draft: true };
+  const comparison = {
+    aheadBy: 2,
+    behindBy: 0,
+    commitCount: 2,
+    existingPull: null,
+  };
+  const port = await serveAPI(t, {
+    listBranches: async (repo) => {
+      calls.push(["branches", repo]);
+      return ["main", "codex/pr-flow"];
+    },
+    compareBranches: async (repo, input) => {
+      calls.push(["compare", repo, input]);
+      return comparison;
+    },
+    createPullRequest: async (repo, input) => {
+      calls.push(["create", repo, input]);
+      return pull;
+    },
+  });
+  const repo = "freddyrosa16/PinkLabs";
+  assert.deepEqual(
+    (await requestAPI(port, `/api/branches?repo=${encodeURIComponent(repo)}`))
+      .body,
+    ["main", "codex/pr-flow"],
+  );
+  assert.deepEqual(
+    (
+      await requestAPI(
+        port,
+        `/api/compare?repo=${encodeURIComponent(repo)}&base=main&head=codex%2Fpr-flow`,
+      )
+    ).body,
+    comparison,
+  );
+  const input = {
+    base: "main",
+    head: "codex/pr-flow",
+    title: " Add PR flow ",
+    body: "## Changes\n\nLiteral `$(example)` stays text.",
+    draft: true,
+  };
+  const created = await requestAPI(port, "/api/pulls", {
+    method: "POST",
+    headers: {
+      origin: `http://127.0.0.1:${port}`,
+      "content-type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify({ repo, ...input }),
+  });
+  assert.equal(created.status, 200);
+  assert.deepEqual(created.body, pull);
+  assert.equal(created.headers["cache-control"], "no-store");
+  assert.equal(created.headers["access-control-allow-origin"], undefined);
+  assert.deepEqual(calls, [
+    ["branches", repo],
+    ["compare", repo, { base: "main", head: "codex/pr-flow" }],
+    ["create", repo, { ...input, title: "Add PR flow" }],
+  ]);
+});
+
+test("local PR API rejects cross-origin, malformed, unsupported, and oversized writes before service calls", async (t) => {
+  let calls = 0;
+  const port = await serveAPI(t, {
+    createPullRequest: async () => {
+      calls++;
+      return {};
+    },
+  });
+  const valid = {
+    repo: "freddyrosa16/PinkLabs",
+    base: "main",
+    head: "codex/pr-flow",
+    title: "Add PR flow",
+    body: "",
+    draft: false,
+  };
+  const headers = {
+    origin: `http://127.0.0.1:${port}`,
+    "content-type": "application/json",
+  };
+  const cases = [
+    {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      headers: { ...headers, origin: "https://evil.test" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      headers: { ...headers, "sec-fetch-site": "cross-site" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      headers: { ...headers, "content-type": "text/plain" },
+      body: JSON.stringify(valid),
+      status: 415,
+    },
+    { headers, body: "{broken", status: 400 },
+    { headers, body: "[]", status: 400 },
+    {
+      headers,
+      body: JSON.stringify({ ...valid, repo: "owner/.." }),
+      status: 400,
+    },
+    {
+      headers,
+      body: JSON.stringify({ ...valid, head: "owner:fork" }),
+      status: 400,
+    },
+    {
+      headers,
+      body: JSON.stringify({ ...valid, draft: "false" }),
+      status: 400,
+    },
+    {
+      headers,
+      body: JSON.stringify({ ...valid, unexpected: "field" }),
+      status: 400,
+    },
+    {
+      headers,
+      body: JSON.stringify({ ...valid, body: "x".repeat(60_001) }),
+      status: 400,
+    },
+    {
+      headers: { ...headers, "content-length": 270_000 },
+      body: "x".repeat(270_000),
+      status: 413,
+    },
+    {
+      headers: { ...headers, "transfer-encoding": "chunked" },
+      body: "x".repeat(270_000),
+      status: 413,
+    },
+  ];
+  for (const { status, ...options } of cases) {
+    const response = await requestAPI(port, "/api/pulls", {
+      method: "POST",
+      ...options,
+    });
+    assert.equal(response.status, status, response.body.error);
+    assert.equal(typeof response.body.error, "string");
+  }
+  assert.equal(
+    (
+      await requestAPI(port, "/api/pulls", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(valid),
+      })
+    ).status,
+    405,
+  );
+  assert.equal(calls, 0);
+});
+
+test("local PR API forwards useful service failures without reporting success", async (t) => {
+  let calls = 0;
+  const port = await serveAPI(t, {
+    createPullRequest: async () => {
+      calls++;
+      throw Object.assign(new Error("The head branch has no new commits."), {
+        status: 422,
+      });
+    },
+  });
+  const response = await requestAPI(port, "/api/pulls", {
+    method: "POST",
+    headers: {
+      origin: `http://127.0.0.1:${port}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repo: "freddyrosa16/PinkLabs",
+      base: "main",
+      head: "codex/pr-flow",
+      title: "Add PR flow",
+      body: "",
+      draft: false,
+    }),
+  });
+  assert.equal(response.status, 422);
+  assert.deepEqual(response.body, {
+    error: "The head branch has no new commits.",
+  });
+  assert.equal(calls, 1);
 });

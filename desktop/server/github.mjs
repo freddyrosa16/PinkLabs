@@ -1,5 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import {
+  validateComparisonInput,
+  validatePullRequestInput,
+} from "./validation.mjs";
 
 const run = promisify(execFile);
 const API_VERSION = "2026-03-10";
@@ -68,36 +72,47 @@ function publicError(error, context = "GitHub data") {
 
 // All CLI arguments are passed directly, never interpreted by a shell. Authentication
 // stays in gh; its stdout/stderr and credentials never reach the renderer as errors.
-async function ghRequest(endpoint) {
-  try {
-    const { stdout } = await run(
-      "gh",
-      [
+export function createGitHubRequest({ execute = run } = {}) {
+  return async function ghRequest(endpoint, { method = "GET", body } = {}) {
+    try {
+      const args = [
         "api",
         "--hostname",
         "github.com",
         "--method",
-        "GET",
+        method,
         endpoint,
         "--header",
         "Accept: application/vnd.github+json",
         "--header",
         `X-GitHub-Api-Version: ${API_VERSION}`,
-      ],
-      { timeout: 25_000, maxBuffer: 12 * 1024 * 1024, windowsHide: true },
-    );
-    return stdout.trim() ? JSON.parse(stdout) : null;
-  } catch (error) {
-    const status =
-      Number(String(error.stderr ?? "").match(/\bHTTP (\d{3})\b/)?.[1]) ||
-      undefined;
-    throw Object.assign(new Error("GitHub request failed"), {
-      status,
-      code: error.code,
-      killed: error.killed,
-    });
-  }
+      ];
+      if (body !== undefined) args.push("--input", "-");
+      const operation = execute("gh", args, {
+        timeout: 25_000,
+        maxBuffer: 12 * 1024 * 1024,
+        windowsHide: true,
+      });
+      if (body !== undefined) {
+        // User-authored titles/descriptions are JSON on stdin, never CLI flags or shell text.
+        operation.child.stdin.on("error", () => {});
+        operation.child.stdin.end(JSON.stringify(body));
+      }
+      const { stdout } = await operation;
+      return stdout.trim() ? JSON.parse(stdout) : null;
+    } catch (error) {
+      const status =
+        Number(String(error.stderr ?? "").match(/\bHTTP (\d{3})\b/)?.[1]) ||
+        undefined;
+      throw Object.assign(new Error("GitHub request failed"), {
+        status,
+        code: error.code,
+        killed: error.killed,
+      });
+    }
+  };
 }
+const ghRequest = createGitHubRequest();
 
 const person = (value, fallback = "Unknown") => ({
   login: value?.login || fallback,
@@ -113,6 +128,15 @@ const release = (value) =>
       }
     : null;
 const array = (value) => (Array.isArray(value) ? value : []);
+const pullRequest = (pull) => ({
+  number: pull.number,
+  title: pull.title || "",
+  url: pull.html_url || "",
+  date: pull.created_at || "",
+  author: person(pull.user),
+  draft: Boolean(pull.draft),
+  branch: pull.head?.ref || "",
+});
 
 function mergeStatuses(statuses) {
   if (statuses.includes("failure")) return "failure";
@@ -165,6 +189,165 @@ export function createGitHubService({
   request = ghRequest,
   now = () => new Date(),
 } = {}) {
+  const creatingPulls = new Map();
+
+  async function listBranches(input) {
+    const fullName = validateRepository(input);
+    const branches = [];
+    try {
+      for (let page = 1; page <= 11; page++) {
+        const batch = await request(
+          `repos/${fullName}/branches?per_page=100&page=${page}`,
+        );
+        if (!Array.isArray(batch))
+          throw new Error("Unexpected branches response");
+        if (page === 11 && batch.length) {
+          throw Object.assign(
+            new Error(
+              "This repository has more than 1,000 branches. Use GitHub to choose from the full list.",
+            ),
+            { userSafe: true },
+          );
+        }
+        branches.push(
+          ...batch
+            .map((branch) => branch.name)
+            .filter((name) => typeof name === "string"),
+        );
+        if (batch.length < 100) return [...new Set(branches)];
+      }
+      return [...new Set(branches)];
+    } catch (error) {
+      if (error.userSafe) throw error;
+      throw publicError(error, "GitHub branches");
+    }
+  }
+
+  async function existingPull(fullName, { base, head }) {
+    const owner = fullName.split("/")[0];
+    const pulls = await request(
+      `repos/${fullName}/pulls?state=open&base=${encodeURIComponent(base)}&head=${encodeURIComponent(`${owner}:${head}`)}&per_page=100`,
+    );
+    if (!Array.isArray(pulls))
+      throw new Error("Unexpected pull request response");
+    const existing = pulls.find(
+      (pull) =>
+        pull.head?.repo?.full_name?.toLowerCase() === fullName.toLowerCase(),
+    );
+    return existing ? pullRequest(existing) : null;
+  }
+
+  async function compareBranches(input, value) {
+    const fullName = validateRepository(input);
+    const { base, head } = validateComparisonInput(value);
+    const path = `repos/${fullName}`;
+    try {
+      const [comparison, existing, baseBranch, headBranch] = await Promise.all([
+        request(
+          `${path}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}?per_page=1`,
+        ),
+        existingPull(fullName, { base, head }),
+        request(`${path}/branches/${encodeURIComponent(base)}`),
+        request(`${path}/branches/${encodeURIComponent(head)}`),
+      ]);
+      if (baseBranch?.name !== base || headBranch?.name !== head) {
+        throw Object.assign(
+          new Error(
+            "A selected branch no longer exists. Refresh the branch list.",
+          ),
+          { status: 404, userSafe: true },
+        );
+      }
+      for (const count of [
+        comparison?.ahead_by,
+        comparison?.behind_by,
+        comparison?.total_commits,
+      ]) {
+        if (!Number.isSafeInteger(count) || count < 0)
+          throw new Error("Unexpected comparison response");
+      }
+      return {
+        aheadBy: comparison.ahead_by,
+        behindBy: comparison.behind_by,
+        commitCount: comparison.total_commits,
+        existingPull: existing,
+      };
+    } catch (error) {
+      if (error.userSafe) throw error;
+      if (error.status === 404)
+        throw Object.assign(
+          new Error(
+            "A selected branch or repository was not found. Check access and refresh the branch list.",
+          ),
+          { status: 404 },
+        );
+      throw publicError(error, "GitHub branch comparison");
+    }
+  }
+
+  function createPullRequest(input, value) {
+    let fullName, payload;
+    try {
+      fullName = validateRepository(input);
+      payload = validatePullRequestInput(value);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const key = JSON.stringify([
+      fullName.toLowerCase(),
+      payload.base,
+      payload.head,
+    ]);
+    if (creatingPulls.has(key)) return creatingPulls.get(key);
+    const operation = (async () => {
+      const comparison = await compareBranches(fullName, {
+        base: payload.base,
+        head: payload.head,
+      });
+      if (comparison.existingPull) return comparison.existingPull;
+      if (!comparison.aheadBy) {
+        throw Object.assign(
+          new Error(
+            "The head branch has no new commits to include in a pull request.",
+          ),
+          { status: 422 },
+        );
+      }
+      try {
+        const created = await request(`repos/${fullName}/pulls`, {
+          method: "POST",
+          body: payload,
+        });
+        if (!Number.isSafeInteger(created?.number) || !created.html_url)
+          throw new Error("GitHub did not confirm creation");
+        return pullRequest(created);
+      } catch (error) {
+        // A concurrent submit or lost response may already have created the PR.
+        // Reconcile by reading; never automatically repeat the write.
+        try {
+          const existing = await existingPull(fullName, payload);
+          if (existing) return existing;
+        } catch {
+          /* Keep the original sanitized failure below. */
+        }
+        if (error.status === 422)
+          throw Object.assign(
+            new Error(
+              "GitHub could not create this pull request. Check the branches, title, and repository permissions.",
+            ),
+            { status: 422 },
+          );
+        if ([401, 403, 404, 429].includes(error.status))
+          throw publicError(error, "Pull request creation");
+        throw new Error(
+          "GitHub did not confirm creation. Refresh Pull Requests before retrying.",
+        );
+      }
+    })().finally(() => creatingPulls.delete(key));
+    creatingPulls.set(key, operation);
+    return operation;
+  }
+
   async function listRepositories() {
     try {
       const repos = await request(
@@ -319,15 +502,7 @@ export function createGitHubService({
           status: await commitCI(commit.sha),
         })),
     );
-    const pulls = array(pullsRaw).map((pull) => ({
-      number: pull.number,
-      title: pull.title || "",
-      url: pull.html_url || "",
-      date: pull.created_at || "",
-      author: person(pull.user),
-      draft: Boolean(pull.draft),
-      branch: pull.head?.ref || "",
-    }));
+    const pulls = array(pullsRaw).map(pullRequest);
     if (pulls.length === 100)
       warnings.push(
         "Showing the 100 most recently updated open pull requests.",
@@ -407,9 +582,18 @@ export function createGitHubService({
       fetchedAt: fetchedAt.toISOString(),
     };
   }
-  return { getRepository, listRepositories };
+  return {
+    getRepository,
+    listRepositories,
+    listBranches,
+    compareBranches,
+    createPullRequest,
+  };
 }
 
 const service = createGitHubService();
 export const getRepository = service.getRepository;
 export const listRepositories = service.listRepositories;
+export const listBranches = service.listBranches;
+export const compareBranches = service.compareBranches;
+export const createPullRequest = service.createPullRequest;

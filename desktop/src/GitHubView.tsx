@@ -26,6 +26,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import type { Repository, Status } from "./types";
 import { ago, external } from "./api";
+import { LanguageIcon } from "./LanguageIcon";
 export function StatusIcon({ status }: { status: Status }) {
   return (
     <span
@@ -85,6 +86,7 @@ export function GitHubView({
   setTab,
   refresh,
   chooseRepo,
+  createPull,
   notify,
 }: {
   repo: Repository | null;
@@ -94,6 +96,7 @@ export function GitHubView({
   setTab: (tab: string) => void;
   refresh: () => void;
   chooseRepo: () => void;
+  createPull: () => void;
   notify: (message: string) => void;
 }) {
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -132,13 +135,19 @@ export function GitHubView({
   return (
     <>
       <header className="topbar">
-        <button className="breadcrumb" onClick={chooseRepo}>
+        <div className="breadcrumb">
           <MarkGithubIcon size={17} />
           <span>{repo?.owner.login || "GitHub"}</span>
           <span className="slash">›</span>
-          <b>{repo?.name || "Choose repository"}</b>
-          <ChevronDownIcon size={12} />
-        </button>
+          <button
+            className="repo-picker"
+            onClick={chooseRepo}
+            aria-label={`Choose repository${repo ? `, current: ${repo.name}` : ""}`}
+          >
+            <b>{repo?.name || "Choose repository"}</b>
+            <ChevronDownIcon size={12} />
+          </button>
+        </div>
         <nav className="repo-tabs" aria-label="Repository views">
           {[
             ["overview", "Overview"],
@@ -213,9 +222,9 @@ export function GitHubView({
                 <div className="repo-meta">
                   {repo.languages[0] && (
                     <span>
-                      <i
-                        className="language-dot"
-                        style={{ background: repo.languages[0].color }}
+                      <LanguageIcon
+                        name={repo.languages[0].name}
+                        color={repo.languages[0].color}
                       />
                       {repo.languages[0].name}
                     </span>
@@ -527,10 +536,7 @@ export function GitHubView({
                             100;
                           return (
                             <span key={l.name}>
-                              <i
-                                className="language-dot"
-                                style={{ background: l.color }}
-                              />
+                              <LanguageIcon name={l.name} color={l.color} />
                               {l.name}
                               <small>{pct < 1 ? "<1" : Math.round(pct)}%</small>
                             </span>
@@ -566,8 +572,8 @@ export function GitHubView({
                   <h2>
                     Open pull requests <span>{repo.openPrCount}</span>
                   </h2>
-                  <button onClick={() => external(`${repo.url}/compare`)}>
-                    New pull request <ArrowUpRightIcon size={12} />
+                  <button onClick={createPull}>
+                    <GitPullRequestIcon size={13} /> New pull request
                   </button>
                 </div>
                 <PullRows repo={repo} all />

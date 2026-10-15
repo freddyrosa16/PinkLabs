@@ -14,7 +14,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { getRepository, listRepositories } from "../server/github.mjs";
+import {
+  getRepository,
+  listRepositories,
+  listBranches,
+  compareBranches,
+  createPullRequest,
+} from "../server/github.mjs";
 import {
   assertTrustedSender,
   containedPath,
@@ -230,6 +236,15 @@ function installIPC() {
     getRepository(validateRepositoryName(repo)),
   );
   register("pink:repositories", () => listRepositories());
+  register("pink:list-branches", (repo) =>
+    listBranches(validateRepositoryName(repo)),
+  );
+  register("pink:compare-branches", (repo, input) =>
+    compareBranches(validateRepositoryName(repo), input),
+  );
+  register("pink:create-pull-request", (repo, input) =>
+    createPullRequest(validateRepositoryName(repo), input),
+  );
   register("pink:open-external", (url) =>
     shell.openExternal(validateExternalURL(url)),
   );

@@ -15,3 +15,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Show the selected Claude, OpenAI/Codex, or Grok provider icon beside conversations. Running titles use a gray shimmer moving left to right, with reduced-motion support.
 - Freddy is building the Python agent through Boot.dev. Keep practice chat clearly labeled until a real backend is connected; do not replace his learning work with an unsolicited agent implementation. Agents details are intentionally deferred.
 - GitHub should update automatically when returning to the app and while actively using it. Preserve the displayed repository during refreshes, coalesce repeated triggers, and pause or back off polling when inactive or unavailable.
+- The owner name in the top breadcrumb is informational text. Only the repository name opens the picker. The bottom-left area is reserved for future account controls.
+- Automatic GitHub checks should be quiet, without recurring spinners or status-label changes, and pause while viewing conversations. Explicit refresh can show progress.
+- Show actual programming-language logos beside language names, with a colored-dot fallback for unsupported languages.
+- Create pull requests inside Pink Labs with branch comparison, title, description, and draft status. Preserve the form while viewing the same repository; external links must clearly say they open GitHub.

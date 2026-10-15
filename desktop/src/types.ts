@@ -22,6 +22,21 @@ export interface PullRequest {
   draft: boolean;
   branch: string;
 }
+export interface BranchSelection {
+  base: string;
+  head: string;
+}
+export interface PullRequestInput extends BranchSelection {
+  title: string;
+  body: string;
+  draft: boolean;
+}
+export interface BranchComparison {
+  aheadBy: number;
+  behindBy: number;
+  commitCount: number;
+  existingPull: PullRequest | null;
+}
 export interface Repository {
   fullName: string;
   name: string;
@@ -62,6 +77,15 @@ export interface RepoSummary {
 export interface PinkBridge {
   repository: (fullName: string) => Promise<Repository>;
   repositories: () => Promise<RepoSummary[]>;
+  listBranches: (fullName: string) => Promise<string[]>;
+  compareBranches: (
+    fullName: string,
+    selection: BranchSelection,
+  ) => Promise<BranchComparison>;
+  createPullRequest: (
+    fullName: string,
+    input: PullRequestInput,
+  ) => Promise<PullRequest>;
   openExternal: (url: string) => Promise<void>;
   writeClipboard: (text: string) => Promise<void>;
   clone: (fullName: string) => Promise<{ canceled: boolean; path?: string }>;
