@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ArrowUpRightIcon,
   BookIcon,
@@ -25,7 +25,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
-import type { Repository, Status } from "./types";
+import type { CloneMethod, Repository, Status } from "./types";
 import { ago, external } from "./api";
 import { LanguageIcon } from "./LanguageIcon";
 import { PullRequestWorkspace } from "./PullRequestWorkspace";
@@ -112,29 +112,48 @@ export function GitHubView({
   notify: (message: string) => void;
 }) {
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneMethod, setCloneMethod] = useState<CloneMethod>("https");
   const [cloning, setCloning] = useState(false);
+  const clonePending = useRef(false);
+  const cloneValue =
+    cloneMethod === "cli"
+      ? `gh repo clone ${repo?.fullName || ""}`
+      : cloneMethod === "ssh"
+        ? `git@github.com:${repo?.fullName || ""}.git`
+        : `https://github.com/${repo?.fullName || ""}.git`;
+  const cloneHelp = {
+    https: "Uses your existing Git credentials for private repositories.",
+    ssh: "Uses your GitHub SSH key. Keep it unlocked in your SSH agent before cloning.",
+    cli: "Uses your GitHub CLI sign-in and its configured HTTPS or SSH protocol.",
+  }[cloneMethod];
   const copy = async (text: string) => {
     try {
       if (window.pink) await window.pink.writeClipboard(text);
       else await navigator.clipboard.writeText(text);
       notify("Copied to clipboard.");
     } catch {
-      notify("Could not access the clipboard. Select and copy the URL.");
+      notify(
+        "Could not access the clipboard. Select and copy the URL or command.",
+      );
     }
   };
   const clone = async () => {
-    if (!repo) return;
+    if (!repo || clonePending.current) return;
     if (!window.pink) {
-      await copy(`git clone https://github.com/${repo.fullName}.git`);
+      await copy(
+        cloneMethod === "cli" ? cloneValue : `git clone ${cloneValue}`,
+      );
       return;
     }
+    clonePending.current = true;
     setCloning(true);
     try {
-      const result = await window.pink.clone(repo.fullName);
+      const result = await window.pink.clone(repo.fullName, cloneMethod);
       if (!result.canceled) notify(`Cloned to ${result.path}`);
     } catch (e) {
       notify((e as Error).message);
     } finally {
+      clonePending.current = false;
       setCloning(false);
       setCloneOpen(false);
     }
@@ -298,23 +317,60 @@ export function GitHubView({
                       />
                       <div className="clone-menu">
                         <strong>Clone repository</strong>
-                        <label>HTTPS</label>
+                        <div
+                          className="clone-method-tabs"
+                          role="group"
+                          aria-label="Clone method"
+                        >
+                          {(
+                            [
+                              ["https", "HTTPS"],
+                              ["ssh", "SSH"],
+                              ["cli", "GitHub CLI"],
+                            ] as const
+                          ).map(([method, label]) => (
+                            <button
+                              key={method}
+                              className={cloneMethod === method ? "active" : ""}
+                              aria-pressed={cloneMethod === method}
+                              disabled={cloning}
+                              onClick={() => setCloneMethod(method)}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <label
+                          className="clone-value-label"
+                          htmlFor="clone-value"
+                        >
+                          {cloneMethod === "cli"
+                            ? "GitHub CLI command"
+                            : `${cloneMethod.toUpperCase()} URL`}
+                        </label>
                         <div className="copy-field">
                           <input
+                            id="clone-value"
                             readOnly
-                            value={`https://github.com/${repo.fullName}.git`}
-                            aria-label="Clone URL"
+                            value={cloneValue}
+                            onFocus={(event) => event.currentTarget.select()}
+                            aria-describedby="clone-method-help"
                           />
                           <button
                             className="icon-button"
-                            aria-label="Copy clone URL"
-                            onClick={() =>
-                              copy(`https://github.com/${repo.fullName}.git`)
+                            aria-label={
+                              cloneMethod === "cli"
+                                ? "Copy GitHub CLI command"
+                                : "Copy clone URL"
                             }
+                            onClick={() => copy(cloneValue)}
                           >
                             <CopyIcon />
                           </button>
                         </div>
+                        <p className="clone-method-help" id="clone-method-help">
+                          {cloneHelp}
+                        </p>
                         <button
                           className="menu-action"
                           disabled={cloning}
@@ -325,7 +381,9 @@ export function GitHubView({
                             ? "Cloning…"
                             : window.pink
                               ? "Clone to your computer"
-                              : "Copy git clone command"}
+                              : cloneMethod === "cli"
+                                ? "Copy GitHub CLI command"
+                                : "Copy git clone command"}
                         </button>
                         <button
                           className="menu-action"

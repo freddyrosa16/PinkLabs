@@ -32,7 +32,8 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("pink:delete-pull-branch", fullName, number, input),
     openExternal: (url) => ipcRenderer.invoke("pink:open-external", url),
     writeClipboard: (text) => ipcRenderer.invoke("pink:write-clipboard", text),
-    clone: (fullName) => ipcRenderer.invoke("pink:clone", fullName),
+    clone: (fullName, method) =>
+      ipcRenderer.invoke("pink:clone", fullName, method),
     chooseFolder: () => ipcRenderer.invoke("pink:choose-folder"),
     openIDE: (folder) => ipcRenderer.invoke("pink:open-ide", folder),
   }),
