@@ -1243,69 +1243,39 @@ code {
   overflow: visible;
 }
 .chat-welcome {
-  display: flex;
-  justify-content: center;
-  padding: 0 28px 24px;
-  text-align: center;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 30px 18px;
 }
 .chat-welcome h1 {
   max-width: 650px;
-  font-size: clamp(23px, 2.3vw, 30px);
-  font-weight: 450;
-  line-height: 1.3;
-  letter-spacing: -0.8px;
+  font-size: clamp(23px, 2.3vw, 28px);
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.65px;
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
 .composer-area {
   flex-shrink: 0;
-  padding: 12px 28px 16px;
-  max-width: 840px;
+  padding: 0 28px 18px;
+  max-width: 720px;
   width: 100%;
   min-width: 0;
   margin: 0 auto;
 }
-.composer-context {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 45px;
-  margin: 0 12px;
-  padding: 5px 12px 10px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-bottom: 0;
-  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-}
-.composer-context > .composer-picker {
-  min-width: 0;
-  max-width: 65%;
-}
-.practice-context {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  flex-shrink: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
 .composer {
   position: relative;
-  margin-top: -5px;
-  background: #303030;
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  padding: 16px 15px 12px;
-  transition: border-color 120ms ease;
-}
-.composer:focus-within {
-  border-color: var(--line-strong);
+  background: var(--surface-raised);
+  border: 1px solid #ffffff1c;
+  border-radius: 18px;
+  padding: 14px 14px 12px;
 }
 .composer textarea {
   display: block;
   width: 100%;
-  min-height: 76px;
+  min-height: 44px;
   padding: 0 2px;
   border: 0;
   border-radius: 0;
@@ -1323,50 +1293,55 @@ code {
 .composer-toolbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
+  gap: 6px;
   margin-top: 8px;
-}
-.composer-key-hint {
-  margin-right: auto;
-  font-size: 11px;
-  color: var(--muted);
 }
 .composer-toolbar > .composer-picker {
   min-width: 0;
-  max-width: calc(100% - 46px);
+  max-width: calc((100% - 48px) / 2);
+}
+.composer-toolbar .composer-picker-trigger {
+  background: #ffffff05;
+  border-radius: 8px;
 }
 .send-button {
-  flex: 0 0 32px;
+  margin-left: auto;
+  flex: 0 0 34px;
   background: var(--text);
   color: var(--canvas);
-  height: 32px;
-  width: 32px;
-  border-radius: 50%;
+  height: 34px;
+  width: 34px;
+  border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .send-button:hover:not(:disabled) {
-  background: white;
+  background: #ffffff;
   color: var(--canvas);
+}
+.composer button:focus-visible {
+  outline-color: var(--text-secondary);
 }
 .send-button:disabled {
-  background: #ffffff12;
-  color: var(--muted);
+  background: #ffffff0c;
+  color: var(--faint);
   opacity: 1;
 }
-.send-button.stop {
-  background: var(--text);
-  color: var(--canvas);
+.composer-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 3px 0;
 }
+.composer-key-hint,
 .composer-note {
   font-size: 11px;
   line-height: 1.5;
   color: var(--faint);
-  text-align: center;
-  margin-top: 10px;
 }
+.composer-key-hint { flex-shrink: 0; }
 .messages {
   max-width: 790px;
   margin: auto;
@@ -2646,20 +2621,11 @@ select option {
   .composer-note {
     font-size: 10px;
   }
-  .composer-context {
-    margin-inline: 8px;
-    padding-inline: 8px;
-    gap: 8px;
-  }
-  .composer-context > .composer-picker {
-    max-width: calc(100% - 108px);
-  }
-  .practice-context {
-    font-size: 11px;
-    gap: 5px;
-  }
   .chat-welcome {
-    padding: 0 24px 20px;
+    padding: 0 16px 18px;
+  }
+  .composer {
+    padding: 14px 12px 12px;
   }
   .ide-page {
     padding: 25px;
@@ -3081,5 +3047,17 @@ button.stat:hover { background: var(--surface-raised); }
   .chat-welcome { padding: 0 20px 16px; }
   .chat-welcome h1 { font-size: 20px; }
   .composer-area { padding-block: 8px; }
-  .composer textarea { min-height: 56px; }
+  .composer textarea { min-height: 44px; }
+}
+
+.workspace-storage-warning {
+  flex: 0 0 auto;
+  /* Leave native title controls and the collapsed-sidebar toggle reachable. */
+  margin: 48px 20px 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--negative-border);
+  border-radius: var(--radius-control);
+  background: var(--negative-bg);
+  color: var(--text);
+  font-size: 12px;
 }

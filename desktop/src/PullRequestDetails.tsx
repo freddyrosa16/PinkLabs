@@ -11,8 +11,7 @@ import {
   SyncIcon,
   XCircleIcon,
 } from "@primer/octicons-react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { SafeMarkdown } from "./SafeMarkdown";
 import { api, external } from "./api";
 import { PullRequestDiff } from "./PullRequestDiff";
 import { PullRequestComments } from "./PullRequestComments";
@@ -433,27 +432,9 @@ export function PullRequestDetails({
           >
             <div className="pr-description markdown">
               {detail.body ? (
-                <Markdown
-                  remarkPlugins={[remarkGfm]}
-                  skipHtml
-                  components={{
-                    a: ({ href, children }) => (
-                      <button
-                        className="markdown-link"
-                        onClick={() => href && external(href)}
-                      >
-                        {children}
-                      </button>
-                    ),
-                    img: ({ alt }) => (
-                      <span className="muted">
-                        {alt ? `[Image: ${alt}]` : "[Image]"}
-                      </span>
-                    ),
-                  }}
-                >
+                <SafeMarkdown linkBase={`https://github.com/${fullName}/`}>
                   {detail.body}
-                </Markdown>
+                </SafeMarkdown>
               ) : (
                 <p className="muted">No description provided.</p>
               )}

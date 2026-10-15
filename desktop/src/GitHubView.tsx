@@ -21,10 +21,7 @@ import {
   LawIcon,
   TagIcon,
 } from "@primer/octicons-react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize from "rehype-sanitize";
+import { RepositoryAvatar, SafeMarkdown } from "./SafeMarkdown";
 import type { CloneMethod, Repository, Status } from "./types";
 import { ago, external } from "./api";
 import { AnimatedIcon } from "./AnimatedIcon";
@@ -74,7 +71,11 @@ export function PullRows({
               {p.draft ? " · Draft" : ""}
             </small>
           </div>
-          <img className="avatar" src={p.author.avatar} alt={p.author.login} />
+          <RepositoryAvatar
+            className="avatar"
+            src={p.author.avatar}
+            alt={p.author.login}
+          />
           <ChevronRightIcon className="muted" />
         </button>
       ))}
@@ -245,7 +246,11 @@ export function GitHubView({
         ) : (
           <>
             <section className="repo-hero">
-              <img className="repo-avatar" src={repo.owner.avatar} alt="" />
+              <RepositoryAvatar
+                className="repo-avatar"
+                src={repo.owner.avatar}
+                alt=""
+              />
               <div className="repo-identity">
                 <div className="repo-name">
                   <h1>{repo.name}</h1>
@@ -538,7 +543,7 @@ export function GitHubView({
                             {c.message.split("\n")[0]}
                           </span>
                           <span className="commit-author">
-                            <img
+                            <RepositoryAvatar
                               className="avatar"
                               src={c.author.avatar}
                               alt=""
@@ -630,7 +635,7 @@ export function GitHubView({
                         onClick={() => external(p.url)}
                         title={p.login}
                       >
-                        <img src={p.avatar} alt={p.login} />
+                        <RepositoryAvatar src={p.avatar} alt={p.login} />
                       </button>
                     ))}
                     {repo.contributors.length === 0 && (
@@ -711,37 +716,14 @@ function Readme({
   return (
     <article className={`markdown ${compact ? "compact" : ""}`}>
       {repo.readme ? (
-        <Markdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeRaw, rehypeSanitize]}
-          components={{
-            a: ({ href, children }) => (
-              <button
-                className="markdown-link"
-                onClick={() =>
-                  href &&
-                  external(
-                    new URL(href, `${repo.url}/blob/${repo.branch}/`).href,
-                  )
-                }
-              >
-                {children}
-              </button>
-            ),
-            img: ({ src, alt }) => (
-              <img
-                src={
-                  src?.startsWith("http")
-                    ? src
-                    : `https://raw.githubusercontent.com/${repo.fullName}/${repo.branch}/${src}`
-                }
-                alt={alt || ""}
-              />
-            ),
-          }}
+        <SafeMarkdown
+          html
+          images="repository"
+          linkBase={`${repo.url}/blob/${encodeURIComponent(repo.branch)}/`}
+          imageBase={`https://raw.githubusercontent.com/${repo.fullName}/${encodeURIComponent(repo.branch)}/`}
         >
           {repo.readme}
-        </Markdown>
+        </SafeMarkdown>
       ) : (
         <p className="muted">No README available.</p>
       )}

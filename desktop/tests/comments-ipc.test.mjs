@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import ts from "typescript";
+import * as renderingPolicy from "../src/rendering-policy.ts";
 import {
   assertTrustedSender,
   validateRepositoryName,
@@ -152,6 +153,10 @@ test("renderer comment API forwards native calls and the browser JSON contract w
   const window = {};
   let fail = false;
   vm.runInNewContext(compiled, {
+    require: (name) => {
+      assert.equal(name, "./rendering-policy");
+      return renderingPolicy;
+    },
     exports,
     window,
     URLSearchParams,

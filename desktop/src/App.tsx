@@ -1,17 +1,9 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-  type CSSProperties,
-} from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowUpRightIcon,
   CheckCircleIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  CodeIcon,
-  FileDirectoryIcon,
   MarkGithubIcon,
   PlusIcon,
   SearchIcon,
@@ -19,23 +11,19 @@ import {
   TrashIcon,
   XIcon,
 } from "@primer/octicons-react";
-import { api, external } from "./api";
+import { external } from "./api";
 import { AnimatedIcon } from "./AnimatedIcon";
 import { ChatComposer } from "./ChatComposer";
+import { IDEView } from "./IDEView";
+import { ModalDialog, RepoChooser, ProjectForm } from "./WorkspaceDialogs";
 import { providers, ProviderIcon } from "./providers";
 import { GitHubView } from "./GitHubView";
 import { PullRequestComposer } from "./PullRequestComposer";
-import {
-  newWorkspace,
-  readWorkspace,
-  removeProject,
-  storageKey,
-  type Workspace,
-  type Session,
-} from "./store";
-import type { Provider, RepoSummary } from "./types";
+import { removeProject, type Session } from "./store";
 import { useRepository } from "./useRepository";
 import { useSidebar } from "./useSidebar";
+import { useWorkspace } from "./useWorkspace";
+import { usePracticeChat } from "./usePracticeChat";
 type Modal =
   | { type: "repository" }
   | { type: "project" }
@@ -44,7 +32,7 @@ type Modal =
   | null;
 export function App() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [workspace, setWorkspace] = useState<Workspace>(readWorkspace);
+  const { workspace, setWorkspace, storageWarning } = useWorkspace();
   const [view, setView] = useState("github");
   const [tab, setTab] = useState("overview");
   const sidebar = useSidebar();
@@ -60,15 +48,9 @@ export function App() {
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [sessionsOpen, setSessionsOpen] = useState(true);
   const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
-  const [activeSession, setActiveSession] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [provider, setProvider] = useState<Provider>("claude");
-  const [projectId, setProjectId] = useState("");
-  const [running, setRunning] = useState<string | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [toast, setToast] = useState("");
   const [undoSession, setUndoSession] = useState<Session | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!sidebar.mobile) setMobileOpen(false);
@@ -109,115 +91,48 @@ export function App() {
     return () => clearTimeout(id);
   }, [toast]);
   useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(workspace));
-    } catch {
-      setToast(
-        "Could not save this workspace. Your browser storage may be full.",
-      );
-    }
-  }, [workspace]);
-  useEffect(() => {
     if (view === "github" || view === "pulls") refreshIfStale();
   }, [view, tab, refreshIfStale]);
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-  const session = workspace.sessions.find((s) => s.id === activeSession);
+  const chat = usePracticeChat({ workspace, setWorkspace, notify });
+  const {
+    session,
+    activeSession,
+    draft,
+    setDraft,
+    provider,
+    setProvider,
+    projectId,
+    setProjectId,
+    running,
+    submit,
+    stop,
+  } = chat;
   const chatProject = workspace.projects.find((p) => p.id === projectId);
   useEffect(() => {
-    messageEnd.current?.scrollIntoView({ behavior: "smooth" });
-  }, [session?.messages.length, running]);
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    messageEnd.current?.scrollIntoView({
+      behavior: reduceMotion ? "instant" : "smooth",
+    });
+  }, [session?.id, session?.messages.length, running]);
   const newChat = () => {
     setMobileOpen(false);
     setView("chat");
-    setActiveSession(null);
-    setDraft("");
+    chat.newChat();
   };
-  const openSession = (s: Session) => {
+  const openSession = (session: Session) => {
     setMobileOpen(false);
     setView("chat");
-    setActiveSession(s.id);
-    setProvider(s.provider);
-    setProjectId(s.projectId || "");
-    setDraft("");
+    chat.openSession(session);
   };
-  function submit() {
-    if (!draft.trim() || running) return;
-    const message = draft.trim();
-    const id = session?.id || crypto.randomUUID();
-    const model = session?.provider || provider;
-    const userMessage = {
-      id: crypto.randomUUID(),
-      role: "user" as const,
-      text: message,
-    };
-    setWorkspace((w) => ({
-      ...w,
-      sessions: session
-        ? w.sessions.map((s) =>
-            s.id === id
-              ? {
-                  ...s,
-                  messages: [...s.messages, userMessage],
-                  updated: Date.now(),
-                }
-              : s,
-          )
-        : [
-            {
-              id,
-              title: message.length > 42 ? message.slice(0, 42) + "…" : message,
-              provider: model,
-              projectId: projectId || null,
-              messages: [userMessage],
-              updated: Date.now(),
-            },
-            ...w.sessions,
-          ],
-    }));
-    setActiveSession(id);
-    setDraft("");
-    setRunning(id);
-    timer.current = setTimeout(() => {
-      const text =
-        "This is a practice reply from the interface. Your message was saved, and the chat flow is working.\n\nOnce we connect your Python agent, its real answer will appear here. The provider you selected is saved with this conversation; no model was called.";
-      setWorkspace((w) => ({
-        ...w,
-        sessions: w.sessions.map((s) =>
-          s.id === id
-            ? {
-                ...s,
-                messages: [
-                  ...s.messages,
-                  { id: crypto.randomUUID(), role: "assistant", text },
-                ],
-                updated: Date.now(),
-              }
-            : s,
-        ),
-      }));
-      setRunning(null);
-      timer.current = null;
-    }, 4200);
-  }
-  function stop() {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
-    setRunning(null);
-    notify("Practice reply stopped.");
-  }
   function deleteSession(id: string) {
     const deleted = workspace.sessions.find((s) => s.id === id) || null;
-    if (running === id) stop();
+    chat.sessionDeleted(id);
     setWorkspace((w) => ({
       ...w,
       sessions: w.sessions.filter((s) => s.id !== id),
     }));
-    if (activeSession === id) setActiveSession(null);
     setModal(null);
     notify("Conversation deleted.");
     setUndoSession(deleted);
@@ -533,6 +448,11 @@ export function App() {
         {...sidebar.resizeProps}
       />
       <main className="main-content" inert={sidebar.mobile && mobileOpen}>
+        {storageWarning && (
+          <p className="workspace-storage-warning" role="alert">
+            {storageWarning}
+          </p>
+        )}
         <button
           ref={sidebar.restoreRef}
           className="restore-sidebar icon-button"
@@ -596,8 +516,8 @@ export function App() {
                   <div className="chat-welcome">
                     <h1>
                       {chatProject
-                        ? `What should we build in ${chatProject.name}?`
-                        : "What would you like to build?"}
+                        ? `What’s next for ${chatProject.name}?`
+                        : "What are we making today?"}
                     </h1>
                   </div>
                 ) : (
@@ -636,7 +556,8 @@ export function App() {
                 setProjectId={setProjectId}
                 projects={workspace.projects}
                 locked={!!session}
-                running={!!running}
+                running={!!session && running === session.id}
+                busyElsewhere={!!running && running !== session?.id}
                 submit={submit}
                 stop={stop}
               />
@@ -675,7 +596,7 @@ export function App() {
               <span className="view-title">IDE</span>
               <span className="muted small">Your project, in your editor</span>
             </header>
-            <IDE
+            <IDEView
               workspace={workspace}
               setWorkspace={setWorkspace}
               notify={notify}
@@ -805,313 +726,6 @@ export function App() {
           </button>
         </div>
       )}
-    </div>
-  );
-}
-function ModalDialog({
-  title,
-  close,
-  children,
-}: {
-  title: string;
-  close: () => void;
-  children: ReactNode;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const d = ref.current;
-    d?.showModal();
-    return () => d?.close();
-  }, []);
-  return (
-    <dialog
-      ref={ref}
-      className="modal"
-      onCancel={close}
-      onClick={(e) => {
-        if (e.target === ref.current) {
-          const rect = ref.current.getBoundingClientRect();
-          if (
-            e.clientX < rect.left ||
-            e.clientX > rect.right ||
-            e.clientY < rect.top ||
-            e.clientY > rect.bottom
-          )
-            close();
-        }
-      }}
-    >
-      <div className="modal-header">
-        <h2>{title}</h2>
-        <button
-          className="icon-button"
-          aria-label="Close dialog"
-          onClick={close}
-        >
-          <XIcon />
-        </button>
-      </div>
-      {children}
-    </dialog>
-  );
-}
-function RepoChooser({
-  current,
-  select,
-}: {
-  current: string;
-  select: (name: string) => void;
-}) {
-  const [name, setName] = useState(current);
-  const [repos, setRepos] = useState<RepoSummary[]>([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    let alive = true;
-    api
-      .repositories()
-      .then((r) => {
-        if (alive) setRepos(r);
-      })
-      .catch((e) => {
-        if (alive) setError(e.message);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  function submit() {
-    const value = name
-      .trim()
-      .replace(/^https:\/\/github.com\//, "")
-      .replace(/\.git$/, "")
-      .replace(/\/$/, "");
-    if (!/^[\w.-]+\/[\w.-]+$/.test(value)) {
-      setError("Enter a repository as owner/name.");
-      return;
-    }
-    select(value);
-  }
-  return (
-    <>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <label className="field-label" htmlFor="repo-name">
-          Repository name or GitHub URL
-        </label>
-        <div className="input-row">
-          <input
-            autoFocus
-            id="repo-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="owner/repository"
-          />
-          <button className="button primary">Open</button>
-        </div>
-      </form>
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      )}
-      <h3 className="chooser-heading">Your repositories</h3>
-      <div className="repo-picker-list">
-        {loading ? (
-          <p className="muted small">Loading repositories…</p>
-        ) : (
-          repos.map((r) => (
-            <button key={r.fullName} onClick={() => select(r.fullName)}>
-              <MarkGithubIcon />
-              <div>
-                <strong>{r.fullName}</strong>
-                <small>
-                  {r.description ||
-                    (r.private ? "Private repository" : "Public repository")}
-                </small>
-              </div>
-              <ChevronRightIcon size={14} />
-            </button>
-          ))
-        )}
-      </div>
-    </>
-  );
-}
-function ProjectForm({
-  save,
-}: {
-  save: (p: {
-    name: string;
-    folder: string | null;
-    repo: string | null;
-  }) => void;
-}) {
-  const [name, setName] = useState("");
-  const [repo, setRepo] = useState("");
-  const [folder, setFolder] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!name.trim()) return;
-        if (repo && !/^[\w.-]+\/[\w.-]+$/.test(repo.trim())) {
-          setError("Use owner/repository for the GitHub repository.");
-          return;
-        }
-        save({ name: name.trim(), folder, repo: repo.trim() || null });
-      }}
-    >
-      <label className="field-label" htmlFor="project-name">
-        Project name
-      </label>
-      <input
-        autoFocus
-        required
-        maxLength={60}
-        id="project-name"
-        placeholder="My next idea"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <label className="field-label" htmlFor="project-repo">
-        GitHub repository <span>optional</span>
-      </label>
-      <input
-        id="project-repo"
-        placeholder="owner/repository"
-        value={repo}
-        onChange={(e) => setRepo(e.target.value)}
-      />
-      {window.pink && (
-        <>
-          <label className="field-label">
-            Local folder <span>optional</span>
-          </label>
-          <button
-            className="folder-choice"
-            type="button"
-            onClick={async () => {
-              try {
-                setFolder(await window.pink!.chooseFolder());
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
-          >
-            <FileDirectoryIcon />
-            {folder || "Choose a folder"}
-          </button>
-        </>
-      )}
-      {error && <p className="form-error">{error}</p>}
-      <div className="modal-actions">
-        <button className="button primary" disabled={!name.trim()}>
-          Create project
-        </button>
-      </div>
-    </form>
-  );
-}
-function IDE({
-  workspace,
-  setWorkspace,
-  notify,
-}: {
-  workspace: Workspace;
-  setWorkspace: React.Dispatch<React.SetStateAction<Workspace>>;
-  notify: (m: string) => void;
-}) {
-  const [id, setId] = useState(workspace.projects[0]?.id || "");
-  const project = workspace.projects.find((p) => p.id === id);
-  return (
-    <div className="ide-page">
-      <div className="feature-icon">
-        <CodeIcon size={32} />
-      </div>
-      <h1>Keep building in your editor.</h1>
-      <p>Open a project folder in Cursor or VS Code.</p>
-      <label className="field-label" htmlFor="ide-project">
-        Project
-      </label>
-      <select
-        id="ide-project"
-        value={id}
-        onChange={(e) => setId(e.target.value)}
-      >
-        {workspace.projects.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
-      {!workspace.projects.length && (
-        <p className="muted">Add a project from the sidebar first.</p>
-      )}
-      <div className="ide-folder">
-        <FileDirectoryIcon />
-        <span>{project?.folder || "No folder selected"}</span>
-      </div>
-      <div className="ide-actions">
-        <button
-          className="button"
-          disabled={!project}
-          onClick={async () => {
-            if (!window.pink) {
-              notify(
-                "Folder selection is available in the Pink Labs desktop window.",
-              );
-              return;
-            }
-            try {
-              const folder = await window.pink.chooseFolder();
-              if (folder)
-                setWorkspace((w) => ({
-                  ...w,
-                  projects: w.projects.map((p) =>
-                    p.id === id ? { ...p, folder } : p,
-                  ),
-                }));
-            } catch (e) {
-              notify((e as Error).message);
-            }
-          }}
-        >
-          Choose folder
-        </button>
-        <button
-          className="button primary"
-          disabled={!project?.folder}
-          onClick={async () => {
-            if (!window.pink) {
-              notify(
-                "Open this project in the Pink Labs desktop window to use your editor.",
-              );
-              return;
-            }
-            try {
-              await window.pink.openIDE(project!.folder!);
-              notify("Project opened in your editor.");
-            } catch (e) {
-              notify((e as Error).message);
-            }
-          }}
-        >
-          Open in editor <ArrowUpRightIcon />
-        </button>
-      </div>
-      <p className="muted small">
-        An embedded editor can come later. This opens the editor you already
-        use.
-      </p>
     </div>
   );
 }

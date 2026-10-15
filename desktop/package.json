@@ -24,7 +24,7 @@
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
-    "vite": "6.4.2"
+    "vite": "6.4.4"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

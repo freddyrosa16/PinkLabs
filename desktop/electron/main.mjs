@@ -83,7 +83,7 @@ const contentTypes = {
   ".woff2": "font/woff2",
 };
 const productionCSP =
-  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'";
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://raw.githubusercontent.com https://user-images.githubusercontent.com https://camo.githubusercontent.com https://avatars.githubusercontent.com; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'";
 
 async function serveApp(request) {
   if (!["GET", "HEAD"].includes(request.method))
@@ -198,12 +198,14 @@ async function openIDE(value) {
         await execute("/usr/bin/open", ["-a", appPath, canonical], {
           timeout: 15_000,
         });
-        return;
+        return "editor";
       }
     }
   }
-  const error = await shell.openPath(canonical);
-  if (error) throw new Error("Could not open the selected project folder.");
+  // A repository folder can be named *.app. Revealing it avoids launching a
+  // bundle through its OS association when no supported editor is installed.
+  shell.showItemInFolder(canonical);
+  return "file-manager";
 }
 
 function installIPC() {
