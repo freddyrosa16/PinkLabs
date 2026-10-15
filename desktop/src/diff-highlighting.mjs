@@ -1,0 +1,185 @@
+import { common, createLowlight } from "lowlight";
+
+const lowlight = createLowlight(common);
+export const MAX_HIGHLIGHT_CHARACTERS = 60_000;
+const MAX_HIGHLIGHT_TOKENS = 20_000;
+const languages = {
+  js: "javascript",
+  jsx: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  ts: "typescript",
+  tsx: "typescript",
+  mts: "typescript",
+  cts: "typescript",
+  py: "python",
+  pyi: "python",
+  pyw: "python",
+  c: "c",
+  h: "c",
+  cc: "cpp",
+  cpp: "cpp",
+  cxx: "cpp",
+  hpp: "cpp",
+  hh: "cpp",
+  cs: "csharp",
+  go: "go",
+  rs: "rust",
+  java: "java",
+  kt: "kotlin",
+  kts: "kotlin",
+  rb: "ruby",
+  php: "php",
+  swift: "swift",
+  m: "objectivec",
+  mm: "objectivec",
+  json: "json",
+  jsonc: "json",
+  yaml: "yaml",
+  yml: "yaml",
+  toml: "ini",
+  ini: "ini",
+  html: "xml",
+  htm: "xml",
+  xml: "xml",
+  svg: "xml",
+  vue: "xml",
+  css: "css",
+  scss: "scss",
+  less: "less",
+  sh: "bash",
+  bash: "bash",
+  zsh: "bash",
+  sql: "sql",
+  md: "markdown",
+  markdown: "markdown",
+  graphql: "graphql",
+  gql: "graphql",
+  lua: "lua",
+  pl: "perl",
+  pm: "perl",
+  r: "r",
+  mk: "makefile",
+  wat: "wasm",
+};
+
+export function languageForFilename(filename) {
+  const name = filename.split("/").at(-1)?.toLowerCase() ?? "";
+  if (["makefile", "gnumakefile"].includes(name)) return "makefile";
+  if ([".bashrc", ".bash_profile", ".zshrc", ".profile"].includes(name))
+    return "bash";
+  return languages[name.split(".").at(-1)] ?? null;
+}
+
+function tokenRole(classes, inherited) {
+  const has = (name) => classes.includes(`hljs-${name}`);
+  if (has("comment") || has("quote")) return "comment";
+  if (has("keyword") || has("doctag") || has("selector-tag")) return "keyword";
+  if (has("string") || has("regexp")) return "string";
+  if (has("number") || has("literal") || has("symbol") || has("bullet"))
+    return "number";
+  if (has("type") || (has("title") && classes.includes("class_")))
+    return "type";
+  if (has("title") || has("function")) return "function";
+  if (
+    has("attr") ||
+    has("attribute") ||
+    has("property") ||
+    has("variable") ||
+    has("built_in")
+  )
+    return "property";
+  if (has("tag") || has("name") || has("selector-id") || has("selector-class"))
+    return "tag";
+  if (has("meta") || has("section")) return "meta";
+  return inherited;
+}
+
+// Keep only literal text and a fixed set of style roles; never serialize HTML or copy AST attributes.
+function highlightLines(source, language) {
+  const lines = [[]];
+  let tokens = 0;
+  function visit(node, inherited = null) {
+    if (node.type === "text") {
+      const pieces = node.value.split("\n");
+      pieces.forEach((text, index) => {
+        if (index) lines.push([]);
+        if (!text) return;
+        const row = lines.at(-1);
+        const className = inherited ? `pr-syntax-${inherited}` : "";
+        if (row.at(-1)?.className === className) row.at(-1).text += text;
+        else {
+          if (++tokens > MAX_HIGHLIGHT_TOKENS)
+            throw new Error("Too many syntax tokens");
+          row.push({ text, className });
+        }
+      });
+    } else if (
+      node.type === "root" ||
+      (node.type === "element" && node.tagName === "span")
+    ) {
+      const role = tokenRole(node.properties?.className ?? [], inherited);
+      for (const child of node.children) visit(child, role);
+    }
+  }
+  visit(lowlight.highlight(language, source));
+  return lines;
+}
+
+export function highlightDiffLines(filename, rows) {
+  const language = languageForFilename(filename);
+  const plain = () => rows.map((row) => [{ text: row.text, className: "" }]);
+  const fallback = (reason) => ({
+    language,
+    rows: plain(),
+    highlighted: false,
+    reason,
+  });
+  if (!language) return fallback("unknown-language");
+  if (rows.some((row) => row.truncated)) return fallback("shortened-line");
+  // Context participates in both versions; count it twice before allocating source strings.
+  const size = rows.reduce(
+    (total, row) =>
+      total + (row.text.length + 1) * (row.kind === "context" ? 2 : 1),
+    0,
+  );
+  if (size > MAX_HIGHLIGHT_CHARACTERS || rows.length > 1_200)
+    return fallback("too-large");
+  const result = plain();
+  let group = [];
+  function flushHunk() {
+    for (const side of ["old", "new"]) {
+      const indexes = group.filter(
+        (index) =>
+          rows[index].kind === "context" ||
+          rows[index].kind === (side === "old" ? "deletion" : "addition"),
+      );
+      if (!indexes.length) continue;
+      const source = indexes.map((index) => rows[index].text).join("\n");
+      const highlighted = highlightLines(source, language);
+      if (highlighted.length !== indexes.length)
+        throw new Error("Syntax line count changed");
+      indexes.forEach((index, position) => {
+        const tokens = highlighted[position];
+        if (tokens.map((token) => token.text).join("") !== rows[index].text)
+          throw new Error("Syntax text changed");
+        // Deletions use the old stream; additions and shared context use the new stream.
+        if (side === "new" || rows[index].kind === "deletion")
+          result[index] = tokens;
+      });
+    }
+    group = [];
+  }
+  try {
+    rows.forEach((row, index) => {
+      if (row.kind === "hunk") flushHunk();
+      else if (["context", "addition", "deletion"].includes(row.kind))
+        group.push(index);
+      // No-newline metadata is not source and must not break an otherwise contiguous hunk.
+    });
+    flushHunk();
+    return { language, rows: result, highlighted: true, reason: null };
+  } catch {
+    return fallback("unavailable");
+  }
+}

@@ -10,6 +10,8 @@ import {
   MAX_DIFF_LINE_LENGTH,
   parseUnifiedDiff,
 } from "./diff-lines.mjs";
+import type { ParsedDiff } from "./diff-lines.mjs";
+import type { HighlightedDiff } from "./diff-highlighting.mjs";
 
 interface ChangedFile {
   filename: string;
@@ -51,6 +53,11 @@ export function PullRequestDiff({
   });
   const [retry, setRetry] = useState(0);
   const [selection, setSelection] = useState({ key: "", filename: "" });
+  const [syntax, setSyntax] = useState<{
+    parsed: ParsedDiff;
+    filename: string;
+    result: HighlightedDiff;
+  } | null>(null);
   useEffect(() => {
     let current = true;
     setLoad({ key, result: null, loading: true, error: "" });
@@ -91,6 +98,31 @@ export function PullRequestDiff({
     () => (file?.patch ? parseUnifiedDiff(file.patch) : null),
     [file?.patch],
   );
+  const filename = file?.filename;
+  useEffect(() => {
+    let current = true;
+    if (!filename || !parsed?.rows.length) return;
+    // The grammar bundle loads only for an opened text diff; plain text stays readable meanwhile.
+    import("./diff-highlighting.mjs")
+      .then(({ highlightDiffLines }) => {
+        if (current)
+          setSyntax({
+            parsed,
+            filename,
+            result: highlightDiffLines(filename, parsed.rows),
+          });
+      })
+      .catch(() => {
+        if (current) setSyntax(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, [filename, parsed]);
+  const syntaxRows =
+    syntax?.parsed === parsed && syntax.filename === filename
+      ? syntax.result.rows
+      : null;
   const githubDiff = `https://github.com/${fullName}/pull/${number}/files`;
 
   return (
@@ -251,7 +283,16 @@ export function PullRequestDiff({
                               </td>
                               <td className="pr-diff-line-code">
                                 <code>
-                                  {line.text}
+                                  {syntaxRows?.[index]?.map(
+                                    (token, tokenIndex) => (
+                                      <span
+                                        key={tokenIndex}
+                                        className={token.className || undefined}
+                                      >
+                                        {token.text}
+                                      </span>
+                                    ),
+                                  ) ?? line.text}
                                   {line.truncated && (
                                     <span
                                       className="pr-diff-shortened"
