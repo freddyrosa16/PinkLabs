@@ -20,6 +20,8 @@ import {
   listBranches,
   compareBranches,
   createPullRequest,
+  getPullRequest,
+  mergePullRequest,
 } from "../server/github.mjs";
 import {
   assertTrustedSender,
@@ -244,6 +246,12 @@ function installIPC() {
   );
   register("pink:create-pull-request", (repo, input) =>
     createPullRequest(validateRepositoryName(repo), input),
+  );
+  register("pink:pull-request", (repo, number) =>
+    getPullRequest(validateRepositoryName(repo), number),
+  );
+  register("pink:merge-pull-request", (repo, number, input) =>
+    mergePullRequest(validateRepositoryName(repo), number, input),
   );
   register("pink:open-external", (url) =>
     shell.openExternal(validateExternalURL(url)),

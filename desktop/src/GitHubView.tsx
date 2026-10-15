@@ -4,6 +4,7 @@ import {
   BookIcon,
   CheckCircleIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   CodeIcon,
   CopyIcon,
   DownloadIcon,
@@ -47,9 +48,11 @@ export function StatusIcon({ status }: { status: Status }) {
 }
 export function PullRows({
   repo,
+  openPull,
   all = false,
 }: {
   repo: Repository;
+  openPull: (number: number) => void;
   all?: boolean;
 }) {
   const rows = all ? repo.pulls : repo.pulls.slice(0, 5);
@@ -59,7 +62,7 @@ export function PullRows({
         <button
           className="pull-row"
           key={p.number}
-          onClick={() => external(p.url)}
+          onClick={() => openPull(p.number)}
         >
           <GitPullRequestIcon className={p.draft ? "muted" : "green"} />
           <div className="row-main">
@@ -70,7 +73,7 @@ export function PullRows({
             </small>
           </div>
           <img className="avatar" src={p.author.avatar} alt={p.author.login} />
-          <ArrowUpRightIcon className="muted" />
+          <ChevronRightIcon className="muted" />
         </button>
       ))}
     </div>
@@ -87,6 +90,7 @@ export function GitHubView({
   refresh,
   chooseRepo,
   createPull,
+  openPull,
   notify,
 }: {
   repo: Repository | null;
@@ -97,6 +101,7 @@ export function GitHubView({
   refresh: () => void;
   chooseRepo: () => void;
   createPull: () => void;
+  openPull: (number: number) => void;
   notify: (message: string) => void;
 }) {
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -432,7 +437,7 @@ export function GitHubView({
                         All on GitHub <ArrowUpRightIcon size={12} />
                       </button>
                     </div>
-                    <PullRows repo={repo} />
+                    <PullRows repo={repo} openPull={openPull} />
                   </section>
                   <section className="commits-section">
                     <div className="section-heading">
@@ -576,7 +581,7 @@ export function GitHubView({
                     <GitPullRequestIcon size={13} /> New pull request
                   </button>
                 </div>
-                <PullRows repo={repo} all />
+                <PullRows repo={repo} openPull={openPull} all />
               </section>
             ) : tab === "releases" ? (
               <section className="release-list">

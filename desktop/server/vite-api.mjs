@@ -4,12 +4,16 @@ import {
   listBranches,
   compareBranches,
   createPullRequest,
+  getPullRequest,
+  mergePullRequest,
 } from "./github.mjs";
 import {
   isAllowedAPIRequest,
   validateRepositoryName,
   validateComparisonInput,
   validatePullRequestInput,
+  validatePullRequestNumber,
+  validateMergeInput,
 } from "./validation.mjs";
 
 const MAX_JSON_BYTES = 256 * 1024;
@@ -86,6 +90,8 @@ export function createApiMiddleware(
     listBranches,
     compareBranches,
     createPullRequest,
+    getPullRequest,
+    mergePullRequest,
   },
 ) {
   return async function pinkApi(request, response, next) {
@@ -106,19 +112,22 @@ export function createApiMiddleware(
       });
     const creatingPull =
       url.pathname === "/api/pulls" && request.method === "POST";
-    if (request.method !== "GET" && !creatingPull)
+    const mergingPull =
+      url.pathname === "/api/merge" && request.method === "POST";
+    const writingPull = creatingPull || mergingPull;
+    if (request.method !== "GET" && !writingPull)
       return send(405, { error: "This action is not supported." });
     if (
-      creatingPull &&
+      writingPull &&
       request.headers.origin !== `http://${request.headers.host}`
     ) {
       return send(403, {
         error:
-          "Pull requests can only be created from the local Pink Labs preview.",
+          "Pull requests can only be changed from the local Pink Labs preview.",
       });
     }
     try {
-      if (creatingPull) {
+      if (writingPull) {
         const raw = await readJSON(request);
         if (!raw || typeof raw !== "object" || Array.isArray(raw))
           throw badRequest("Invalid pull request details.");
@@ -129,8 +138,24 @@ export function createApiMiddleware(
         } catch (error) {
           throw badRequest(error.message);
         }
-        const input = validatePullRequestInput(fields);
-        return send(200, await services.createPullRequest(fullName, input));
+        if (mergingPull) {
+          const { number, ...mergeFields } = fields;
+          return send(
+            200,
+            await services.mergePullRequest(
+              fullName,
+              validatePullRequestNumber(number),
+              validateMergeInput(mergeFields),
+            ),
+          );
+        }
+        return send(
+          200,
+          await services.createPullRequest(
+            fullName,
+            validatePullRequestInput(fields),
+          ),
+        );
       }
       if (url.pathname === "/api/repository") {
         let repo;
@@ -143,7 +168,9 @@ export function createApiMiddleware(
       }
       if (url.pathname === "/api/repositories")
         return send(200, await services.listRepositories());
-      if (["/api/branches", "/api/compare"].includes(url.pathname)) {
+      if (
+        ["/api/branches", "/api/compare", "/api/pull"].includes(url.pathname)
+      ) {
         let repo;
         try {
           repo = validateRepositoryName(url.searchParams.get("repo"));
@@ -152,6 +179,18 @@ export function createApiMiddleware(
         }
         if (url.pathname === "/api/branches")
           return send(200, await services.listBranches(repo));
+        if (url.pathname === "/api/pull") {
+          const number = url.searchParams.get("number");
+          if (!/^[1-9]\d*$/.test(number || ""))
+            throw badRequest("Choose a valid pull request number.");
+          return send(
+            200,
+            await services.getPullRequest(
+              repo,
+              validatePullRequestNumber(Number(number)),
+            ),
+          );
+        }
         const input = validateComparisonInput({
           base: url.searchParams.get("base"),
           head: url.searchParams.get("head"),
@@ -162,7 +201,7 @@ export function createApiMiddleware(
     } catch (error) {
       // The GitHub service returns user-safe errors, never raw gh authentication output.
       return send(
-        [400, 401, 403, 404, 408, 409, 413, 415, 422, 429].includes(
+        [400, 401, 403, 404, 405, 408, 409, 413, 415, 422, 429].includes(
           error.status,
         )
           ? error.status

@@ -115,6 +115,25 @@ export function validatePullRequestInput(value) {
   };
 }
 
+export function validatePullRequestNumber(value) {
+  if (!Number.isSafeInteger(value) || value < 1)
+    throw inputError("Choose a valid pull request number.");
+  return value;
+}
+
+export function validateMergeInput(value) {
+  const input = inputObject(value, ["sha", "base", "method"]);
+  if (typeof input.sha !== "string" || !/^[a-f\d]{40}$/i.test(input.sha))
+    throw inputError("Refresh this pull request to get its latest commit.");
+  if (!["merge", "squash", "rebase"].includes(input.method))
+    throw inputError("Choose merge, squash, or rebase.");
+  return {
+    sha: input.sha.toLowerCase(),
+    base: validateBranchName(input.base),
+    method: input.method,
+  };
+}
+
 export function validateExternalURL(value) {
   if (
     typeof value !== "string" ||

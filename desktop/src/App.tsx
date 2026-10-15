@@ -23,6 +23,7 @@ import {
 import { api, external } from "./api";
 import { GitHubView } from "./GitHubView";
 import { PullRequestComposer } from "./PullRequestComposer";
+import { PullRequestDetails } from "./PullRequestDetails";
 import {
   newWorkspace,
   readWorkspace,
@@ -61,6 +62,10 @@ export function App() {
   const [tab, setTab] = useState("overview");
   const [sidebar, setSidebar] = useState(true);
   const [composerRepo, setComposerRepo] = useState<string | null>(null);
+  const [selectedPull, setSelectedPull] = useState<{
+    repo: string;
+    number: number;
+  } | null>(null);
   const { repo, loading, error, refresh, refreshIfStale, refreshAfterChange } =
     useRepository(workspace.repo, view === "github" || view === "pulls");
   const [projectsOpen, setProjectsOpen] = useState(true);
@@ -474,6 +479,9 @@ export function App() {
             loading={loading}
             error={error}
             createPull={() => repo && setComposerRepo(repo.fullName)}
+            openPull={(number) =>
+              repo && setSelectedPull({ repo: repo.fullName, number })
+            }
             tab={view === "pulls" ? "pulls" : tab}
             setTab={(t) => {
               setView("github");
@@ -660,6 +668,18 @@ export function App() {
           </>
         )}
       </main>
+      {selectedPull && repo?.fullName === selectedPull.repo && (
+        <PullRequestDetails
+          key={`${selectedPull.repo}/${selectedPull.number}`}
+          fullName={selectedPull.repo}
+          number={selectedPull.number}
+          close={() => setSelectedPull(null)}
+          merged={() => {
+            notify(`Pull request #${selectedPull.number} merged.`);
+            void refreshAfterChange();
+          }}
+        />
+      )}
       {repo && (
         <PullRequestComposer
           key={repo.fullName}

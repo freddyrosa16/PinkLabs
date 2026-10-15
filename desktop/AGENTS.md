@@ -19,3 +19,4 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Automatic GitHub checks should be quiet, without recurring spinners or status-label changes, and pause while viewing conversations. Explicit refresh can show progress.
 - Show actual programming-language logos beside language names, with a colored-dot fallback for unsupported languages.
 - Create pull requests inside Pink Labs with branch comparison, title, description, and draft status. Preserve the form while viewing the same repository; external links must clearly say they open GitHub.
+- Open pull request details inside Pink Labs and allow merging after an explicit confirmation that names the PR, destination branch, and merge method. Show GitHub checks and blocking reasons; refresh after a successful merge.

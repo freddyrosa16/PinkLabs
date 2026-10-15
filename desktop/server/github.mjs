@@ -3,6 +3,8 @@ import { promisify } from "node:util";
 import {
   validateComparisonInput,
   validatePullRequestInput,
+  validatePullRequestNumber,
+  validateMergeInput,
 } from "./validation.mjs";
 
 const run = promisify(execFile);
@@ -128,6 +130,10 @@ const release = (value) =>
       }
     : null;
 const array = (value) => (Array.isArray(value) ? value : []);
+const isSHA = (value) =>
+  typeof value === "string" && /^[a-f\d]{40}$/i.test(value);
+const actionError = (message, status = 409) =>
+  Object.assign(new Error(message), { status });
 const pullRequest = (pull) => ({
   number: pull.number,
   title: pull.title || "",
@@ -190,6 +196,273 @@ export function createGitHubService({
   now = () => new Date(),
 } = {}) {
   const creatingPulls = new Map();
+  const mergingPulls = new Map();
+
+  async function readPull(fullName, number) {
+    const pull = await request(`repos/${fullName}/pulls/${number}`);
+    if (
+      pull?.number !== number ||
+      !["open", "closed"].includes(pull.state) ||
+      !isSHA(pull.head?.sha) ||
+      typeof pull.base?.ref !== "string"
+    )
+      throw new Error("Incomplete pull request response");
+    return pull;
+  }
+
+  async function pullChecks(fullName, sha) {
+    async function collect(kind) {
+      const checks = [];
+      let expected = 0;
+      try {
+        for (let page = 1; page <= 10; page++) {
+          const endpoint =
+            kind === "runs"
+              ? `repos/${fullName}/commits/${sha}/check-runs?filter=latest&per_page=100&page=${page}`
+              : `repos/${fullName}/commits/${sha}/status?per_page=100&page=${page}`;
+          const result = await request(endpoint);
+          const batch = kind === "runs" ? result?.check_runs : result?.statuses;
+          if (
+            !Array.isArray(batch) ||
+            !Number.isSafeInteger(result?.total_count) ||
+            result.total_count < 0
+          )
+            throw new Error("Incomplete check response");
+          expected = Math.max(expected, result.total_count);
+          checks.push(
+            ...batch.map((item) =>
+              kind === "runs"
+                ? {
+                    name: item.name || "Unnamed check",
+                    status: checkStatus(item),
+                    url: item.html_url || item.details_url || "",
+                  }
+                : {
+                    name: item.context || "Commit status",
+                    status:
+                      item.state === "success"
+                        ? "success"
+                        : ["failure", "error"].includes(item.state)
+                          ? "failure"
+                          : "pending",
+                    url: item.target_url || "",
+                  },
+            ),
+          );
+          if (checks.length >= expected) return { checks, incomplete: false };
+          if (batch.length < 100) break;
+        }
+      } catch {
+        // Preserve the checks we did load, but never present partial data as complete.
+      }
+      return { checks, incomplete: true };
+    }
+    const [runs, statuses] = await Promise.all([
+      collect("runs"),
+      collect("statuses"),
+    ]);
+    return {
+      checks: [...runs.checks, ...statuses.checks],
+      checksIncomplete: runs.incomplete || statuses.incomplete,
+    };
+  }
+
+  async function getPullRequest(input, value) {
+    const fullName = validateRepository(input);
+    const number = validatePullRequestNumber(value);
+    let pull, metadata;
+    try {
+      [pull, metadata] = await Promise.all([
+        readPull(fullName, number),
+        request(`repos/${fullName}`),
+      ]);
+    } catch (error) {
+      throw publicError(error, "GitHub pull request details");
+    }
+    const headSha = pull.head.sha.toLowerCase();
+    const { checks, checksIncomplete } = await pullChecks(fullName, headSha);
+    const mergeable =
+      typeof pull.mergeable === "boolean" ? pull.mergeable : null;
+    const mergeState =
+      typeof pull.mergeable_state === "string"
+        ? pull.mergeable_state.toLowerCase()
+        : "unknown";
+    const mergeMethods = ["merge", "squash", "rebase"].filter(
+      (method) =>
+        metadata?.[
+          method === "merge" ? "allow_merge_commit" : `allow_${method}_merge`
+        ] === true &&
+        (method !== "rebase" || pull.rebaseable !== false),
+    );
+    let mergeBlockReason = "";
+    if (pull.merged)
+      mergeBlockReason = "This pull request has already been merged.";
+    else if (pull.state !== "open")
+      mergeBlockReason = "This pull request is closed.";
+    else if (pull.draft)
+      mergeBlockReason =
+        "Mark this draft ready for review on GitHub before merging.";
+    else if (metadata?.archived || metadata?.disabled)
+      mergeBlockReason = "This repository is archived or disabled.";
+    else if (metadata?.permissions?.push !== true)
+      mergeBlockReason =
+        "Your GitHub account does not have permission to merge into this repository.";
+    else if (!mergeMethods.length)
+      mergeBlockReason =
+        "No supported merge method is available for this pull request.";
+    else if (mergeable === false || mergeState === "dirty")
+      mergeBlockReason =
+        "Resolve this pull request's merge conflicts before merging.";
+    else if (mergeable === null || mergeState === "unknown")
+      mergeBlockReason =
+        "GitHub is still checking whether this pull request can merge. Refresh in a moment.";
+    else if (mergeState === "behind")
+      mergeBlockReason =
+        "Update the head branch with the base branch before merging.";
+    else if (mergeState === "blocked")
+      mergeBlockReason =
+        "GitHub requires reviews, checks, or other branch rules to be satisfied before merging.";
+    else if (!["clean", "unstable", "has_hooks"].includes(mergeState))
+      mergeBlockReason =
+        "GitHub has not confirmed that this pull request is ready to merge. Refresh its details.";
+    else if (checksIncomplete)
+      mergeBlockReason =
+        "Some check results could not be loaded, or exceed the 1,000-result limit per source. Refresh before merging.";
+    return {
+      ...pullRequest(pull),
+      body: typeof pull.body === "string" ? pull.body : "",
+      state: pull.state,
+      merged: pull.merged === true,
+      base: pull.base.ref,
+      headSha,
+      mergeable,
+      mergeState,
+      canMerge: !mergeBlockReason,
+      mergeBlockReason,
+      mergeMethods,
+      checks,
+      checksIncomplete,
+      additions: pull.additions ?? 0,
+      deletions: pull.deletions ?? 0,
+      changedFiles: pull.changed_files ?? 0,
+      commits: pull.commits ?? 0,
+    };
+  }
+
+  function mergePullRequest(input, value, fields) {
+    let fullName, number, payload;
+    try {
+      fullName = validateRepository(input);
+      number = validatePullRequestNumber(value);
+      payload = validateMergeInput(fields);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const key = `${fullName.toLowerCase()}#${number}`;
+    const signature = JSON.stringify(payload);
+    const running = mergingPulls.get(key);
+    if (running)
+      return running.signature === signature
+        ? running.promise
+        : Promise.reject(
+            actionError(
+              "A merge is already in progress. Wait, then refresh this pull request.",
+            ),
+          );
+    const promise = (async () => {
+      // Recheck permission, protections, target branch, and the exact commit the user reviewed.
+      const fresh = await getPullRequest(fullName, number);
+      if (fresh.headSha !== payload.sha || fresh.base !== payload.base)
+        throw actionError(
+          "This pull request changed since you reviewed it. Refresh and review its latest head commit and base branch before merging.",
+        );
+      if (!fresh.canMerge) throw actionError(fresh.mergeBlockReason, 405);
+      if (!fresh.mergeMethods.includes(payload.method))
+        throw actionError(
+          "This merge method is no longer available. Refresh and choose an allowed method.",
+          405,
+        );
+      // Check collection can take time. Re-read immediately before PUT; GitHub's sha
+      // guard is atomic for the head, but its API has no equivalent base-branch guard.
+      let finalPull;
+      try {
+        finalPull = await readPull(fullName, number);
+      } catch (error) {
+        throw publicError(error, "GitHub merge preflight");
+      }
+      if (
+        finalPull.head.sha.toLowerCase() !== payload.sha ||
+        finalPull.base.ref !== payload.base
+      )
+        throw actionError(
+          "This pull request changed during the merge check. Refresh and review it again.",
+        );
+      if (
+        finalPull.state !== "open" ||
+        finalPull.merged ||
+        finalPull.draft ||
+        finalPull.mergeable !== true ||
+        !["clean", "unstable", "has_hooks"].includes(
+          finalPull.mergeable_state,
+        ) ||
+        (payload.method === "rebase" && finalPull.rebaseable === false)
+      )
+        throw actionError(
+          "This pull request is no longer ready to merge. Refresh its details before continuing.",
+          405,
+        );
+      try {
+        const result = await request(
+          `repos/${fullName}/pulls/${number}/merge`,
+          {
+            method: "PUT",
+            body: { sha: payload.sha, merge_method: payload.method },
+          },
+        );
+        if (result?.merged === true && isSHA(result.sha))
+          return { merged: true, sha: result.sha };
+        throw new Error("GitHub did not confirm the merge");
+      } catch (error) {
+        // A timeout can happen after success. Read once to reconcile; never replay the PUT.
+        if (!error.status || error.status >= 500) {
+          try {
+            const merged = await readPull(fullName, number);
+            if (
+              merged.merged === true &&
+              merged.state === "closed" &&
+              merged.head.sha.toLowerCase() === payload.sha &&
+              merged.base.ref === payload.base &&
+              isSHA(merged.merge_commit_sha)
+            )
+              return { merged: true, sha: merged.merge_commit_sha };
+          } catch {
+            /* Leave the outcome unconfirmed below. */
+          }
+        }
+        if (error.status === 405)
+          throw actionError(
+            "GitHub blocked the merge. Refresh to check required reviews, checks, branch rules, or merge queue requirements.",
+            405,
+          );
+        if (error.status === 409)
+          throw actionError(
+            "The head commit changed before the merge. Refresh and review the latest changes.",
+          );
+        if (error.status === 422)
+          throw actionError(
+            "GitHub could not validate this merge. Refresh and check the selected merge method and repository rules.",
+            422,
+          );
+        if ([401, 403, 404, 429].includes(error.status))
+          throw publicError(error, "Pull request merge");
+        throw new Error(
+          "GitHub did not confirm the merge. Refresh this pull request before retrying; the merge may already have completed.",
+        );
+      }
+    })().finally(() => mergingPulls.delete(key));
+    mergingPulls.set(key, { signature, promise });
+    return promise;
+  }
 
   async function listBranches(input) {
     const fullName = validateRepository(input);
@@ -408,7 +681,7 @@ export function createGitHubService({
       optional(
         "Pull requests",
         `${path}/pulls?state=open&sort=updated&direction=desc&per_page=100`,
-        [],
+        null,
       ),
       optional(
         "Pull request count",
@@ -547,9 +820,12 @@ export function createGitHubService({
       topics: array(metadata.topics),
       stars: metadata.stargazers_count || 0,
       forks: metadata.forks_count || 0,
-      openPrCount: Number.isFinite(pullCount?.total_count)
-        ? Math.max(pullCount.total_count, pulls.length)
-        : pulls.length,
+      openPrCount:
+        Array.isArray(pullsRaw) && pulls.length < 100
+          ? pulls.length
+          : Number.isFinite(pullCount?.total_count)
+            ? Math.max(pullCount.total_count, pulls.length)
+            : pulls.length,
       viewerStarred: starred,
       commits,
       pulls,
@@ -588,6 +864,8 @@ export function createGitHubService({
     listBranches,
     compareBranches,
     createPullRequest,
+    getPullRequest,
+    mergePullRequest,
   };
 }
 
@@ -597,3 +875,5 @@ export const listRepositories = service.listRepositories;
 export const listBranches = service.listBranches;
 export const compareBranches = service.compareBranches;
 export const createPullRequest = service.createPullRequest;
+export const getPullRequest = service.getPullRequest;
+export const mergePullRequest = service.mergePullRequest;

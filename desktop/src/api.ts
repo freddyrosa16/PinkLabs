@@ -5,6 +5,9 @@ import type {
   BranchComparison,
   PullRequestInput,
   PullRequest,
+  PullRequestDetail,
+  MergePullRequestInput,
+  MergePullRequestResult,
 } from "./types";
 const pendingRepositories = new Map<string, Promise<Repository>>();
 async function get<T>(path: string, options?: RequestInit): Promise<T> {
@@ -47,6 +50,24 @@ export const api = {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ repo, ...input }),
+        }),
+  getPullRequest: (repo: string, number: number) =>
+    window.pink
+      ? window.pink.getPullRequest(repo, number)
+      : get<PullRequestDetail>(
+          `/api/pull?${new URLSearchParams({ repo, number: String(number) })}`,
+        ),
+  mergePullRequest: (
+    repo: string,
+    number: number,
+    input: MergePullRequestInput,
+  ) =>
+    window.pink
+      ? window.pink.mergePullRequest(repo, number, input)
+      : get<MergePullRequestResult>("/api/merge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo, number, ...input }),
         }),
 };
 export function external(url: string) {
