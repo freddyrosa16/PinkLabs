@@ -1,6 +1,59 @@
 import { common, createLowlight } from "lowlight";
 
 const lowlight = createLowlight(common);
+
+// Normal JSX grouping expects surrounding value expressions and closing elements, which
+// diff hunks often omit. Recognize individual tags while keeping JS/TS parsing in braces.
+function jsxExcerptGrammar(base) {
+  return (api) => {
+    const language = common[base](api);
+    const expression = {
+      scope: "subst",
+      begin: /\{/,
+      end: /\}/,
+      keywords: language.keywords,
+      contains: [],
+    };
+    const fragment = { scope: "tag", match: /<\/?>/ };
+    const constraint = /\s+(?:extends|in)\b/y;
+    const tag = {
+      scope: "tag",
+      begin: /<\/?[A-Za-z][A-Za-z0-9._:-]*(?=[\s/>]|$)/,
+      end: /\/?>/,
+      contains: [
+        { scope: "attr", match: /[A-Za-z_:][A-Za-z0-9_.:-]*/ },
+        api.APOS_STRING_MODE,
+        api.QUOTE_STRING_MODE,
+        expression,
+      ],
+      "on:begin": (match, response) => {
+        if (match[0].startsWith("</")) return;
+        const afterName = match.index + match[0].length;
+        constraint.lastIndex = afterName;
+        // Avoid generic arrows (<T,>, <T extends Item>) and calls such as fn<Item>.
+        // The comma case does not match begin; these guards avoid consuming their rest as a tag.
+        if (
+          constraint.test(match.input) ||
+          (match.input[afterName] === ">" &&
+            /[\w$.\]]/.test(match.input[match.index - 1] ?? ""))
+        )
+          response.ignoreMatch();
+      },
+    };
+    for (const container of language.contains) {
+      const index = container.contains?.findIndex(
+        (mode) => mode.subLanguage === "xml" && mode.variants,
+      );
+      if (index >= 0) container.contains.splice(index, 1, fragment, tag);
+    }
+    language.contains.unshift(fragment, tag);
+    expression.contains = ["self", ...language.contains];
+    return { ...language, name: `${base} JSX excerpt`, aliases: [] };
+  };
+}
+lowlight.register("javascript-diff-jsx", jsxExcerptGrammar("javascript"));
+lowlight.register("typescript-diff-jsx", jsxExcerptGrammar("typescript"));
+
 export const MAX_HIGHLIGHT_CHARACTERS = 60_000;
 const MAX_HIGHLIGHT_TOKENS = 20_000;
 const languages = {
@@ -140,6 +193,9 @@ export function highlightDiffLines(filename, rows) {
   });
   if (!language) return fallback("unknown-language");
   if (rows.length > 1_200) return fallback("too-large");
+  const grammar = /\.[jt]sx$/i.test(filename)
+    ? `${language}-diff-jsx`
+    : language;
   const result = plain();
   let remaining = MAX_HIGHLIGHT_CHARACTERS;
   let reason = null;
@@ -175,7 +231,7 @@ export function highlightDiffLines(filename, rows) {
       remaining -= size;
       try {
         const source = indexes.map((index) => rows[index].text).join("\n");
-        const highlighted = highlightLines(source, language);
+        const highlighted = highlightLines(source, grammar);
         if (
           highlighted.length !== indexes.length ||
           indexes.some(

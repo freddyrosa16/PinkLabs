@@ -81,6 +81,141 @@ test("template expressions reset string color while keeping nested syntax roles"
   assert.equal(text(tokens), source);
 });
 
+test("real PR6 TSX excerpts highlight JSX tags, attributes, strings, and both versions", () => {
+  // Exact hunks from 906c2f6 -- desktop/src/PullRequestDetails.tsx; no surrounding JSX closure.
+  const patch = [
+    "@@ -324,7 +324,7 @@ export function PullRequestDetails({",
+    "         <>",
+    '           <div className="pr-detail-title">',
+    "             {done ? (",
+    '-              <GitMergeIcon size={20} className="green" />',
+    '+              <GitMergeIcon size={20} className="pr-merged-icon" />',
+    "             ) : (",
+    "               <GitPullRequestIcon",
+    "                 size={20}",
+    "@@ -334,7 +334,7 @@ export function PullRequestDetails({",
+    "             <h3>{detail.title}</h3>",
+    "           </div>",
+    '           <div className="pr-detail-meta">',
+    '-            <span className="badge">',
+    '+            <span className={`badge${done ? " merged" : ""}`}>',
+    "               {done",
+    '                 ? "Merged"',
+    '                 : detail.state === "closed"',
+  ].join("\n");
+  const parsed = parseUnifiedDiff(patch);
+  const result = highlightDiffLines(
+    "desktop/src/PullRequestDetails.tsx",
+    parsed.rows,
+  );
+  for (const [index, line] of parsed.rows.entries()) {
+    if (line.text.includes("<GitMergeIcon")) {
+      assert.ok(role(result.rows[index], "tag", "GitMergeIcon"));
+      assert.ok(role(result.rows[index], "property", "className"));
+      assert.ok(role(result.rows[index], "property", "size"));
+      assert.ok(role(result.rows[index], "number", "20"));
+      assert.ok(
+        role(
+          result.rows[index],
+          "string",
+          line.kind === "deletion" ? '"green"' : '"pr-merged-icon"',
+        ),
+      );
+    }
+    if (line.text.includes("<span")) {
+      assert.ok(role(result.rows[index], "tag", "span"));
+      assert.ok(role(result.rows[index], "property", "className"));
+      assert.ok(
+        role(
+          result.rows[index],
+          "string",
+          line.kind === "deletion" ? '"badge"' : '" merged"',
+        ),
+      );
+    }
+  }
+  assert.equal(result.partial, false);
+  assert.deepEqual(
+    result.rows.map(text),
+    parsed.rows.map((row) => row.text),
+  );
+});
+
+test("JSX excerpts leave tag-like comments and quoted strings in their original roles", () => {
+  const lines = [
+    '/* <Fake className="comment">',
+    "still a comment </Fake> */",
+    'const quoted = "<Fake value=1 />";',
+    "const single = '<Another />';",
+    '<Real title="yes" />',
+  ];
+  const parsed = parseUnifiedDiff(
+    `@@ -0,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}`,
+  );
+  for (const filename of ["example.tsx", "example.jsx"]) {
+    const result = highlightDiffLines(filename, parsed.rows);
+    assert.ok(role(result.rows[1], "comment", "<Fake"));
+    assert.ok(role(result.rows[2], "comment", "</Fake>"));
+    assert.ok(role(result.rows[3], "string", "<Fake"));
+    assert.ok(role(result.rows[4], "string", "<Another"));
+    for (const line of result.rows.slice(1, 5))
+      assert.ok(!line.some((token) => token.className === "pr-syntax-tag"));
+    assert.ok(role(result.rows[5], "tag", "Real"));
+    assert.deepEqual(
+      result.rows.map(text),
+      parsed.rows.map((row) => row.text),
+    );
+  }
+});
+
+test("JSX attributes preserve nested object and callback expression syntax", () => {
+  const lines = [
+    '<Box value={{nested: {message: "yes"}}}',
+    ' onClick={() => { if (ready) { return "go"; } }}',
+    ' count={20} title="after" />',
+  ];
+  const parsed = parseUnifiedDiff(
+    `@@ -0,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}`,
+  );
+  const result = highlightDiffLines("example.tsx", parsed.rows);
+  assert.ok(role(result.rows[1], "tag", "Box"));
+  assert.ok(role(result.rows[1], "property", "message"));
+  assert.ok(role(result.rows[1], "string", '"yes"'));
+  assert.ok(role(result.rows[2], "keyword", "return"));
+  assert.ok(role(result.rows[2], "string", '"go"'));
+  assert.ok(role(result.rows[3], "property", "count"));
+  assert.ok(role(result.rows[3], "number", "20"));
+  assert.ok(role(result.rows[3], "string", '"after"'));
+  assert.deepEqual(
+    result.rows.map(text),
+    parsed.rows.map((row) => row.text),
+  );
+});
+
+test("TSX generic arrows do not start a tag or consume following code", () => {
+  const lines = [
+    "const first = <T,>(value: T) => value;",
+    "const next = <T extends Item>(value: T) => value;",
+    "const result = first<Item>(input);",
+    'const message = "after generics";',
+  ];
+  const parsed = parseUnifiedDiff(
+    `@@ -0,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}`,
+  );
+  const result = highlightDiffLines("example.tsx", parsed.rows);
+  assert.ok(
+    result.rows.every((line) =>
+      line.every((token) => token.className !== "pr-syntax-tag"),
+    ),
+  );
+  assert.ok(role(result.rows[2], "keyword", "extends"));
+  assert.ok(role(result.rows[4], "string", '"after generics"'));
+  assert.deepEqual(
+    result.rows.map(text),
+    parsed.rows.map((row) => row.text),
+  );
+});
+
 test("literal markup remains escaped React text, with no source-derived attributes", () => {
   const source =
     '<img src=x onerror="alert(1)"><script>window.bad = true</script> & ${shell}';
