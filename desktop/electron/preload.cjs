@@ -19,6 +19,15 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("pink:list-pull-requests", fullName, state),
     getPullRequestFiles: (fullName, number, sha) =>
       ipcRenderer.invoke("pink:pull-request-files", fullName, number, sha),
+    getPullRequestComments: (fullName, number) =>
+      ipcRenderer.invoke("pink:pull-request-comments", fullName, number),
+    createPullRequestComment: (fullName, number, input) =>
+      ipcRenderer.invoke(
+        "pink:create-pull-request-comment",
+        fullName,
+        number,
+        input,
+      ),
     deletePullRequestBranch: (fullName, number, input) =>
       ipcRenderer.invoke("pink:delete-pull-branch", fullName, number, input),
     openExternal: (url) => ipcRenderer.invoke("pink:open-external", url),

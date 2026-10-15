@@ -154,6 +154,18 @@ export function validateDeleteBranchInput(value) {
   };
 }
 
+export function validatePullRequestCommentInput(value) {
+  const input = inputObject(value, ["body"]);
+  if (
+    typeof input.body !== "string" ||
+    !input.body.trim() ||
+    input.body.length > 65_536
+  )
+    throw inputError("Write a nonblank comment of at most 65,536 characters.");
+  // Preserve intentional indentation, newlines, and trailing Markdown whitespace.
+  return { body: input.body };
+}
+
 export function validateExternalURL(value) {
   if (
     typeof value !== "string" ||

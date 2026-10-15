@@ -47,6 +47,28 @@ export interface PullRequestFiles {
   files: PullRequestFile[];
   truncated: boolean;
 }
+export interface PullRequestComment {
+  id: string;
+  kind: "comment" | "review" | "inline";
+  body: string;
+  author: Person;
+  date: string;
+  updatedAt: string;
+  url: string;
+  path?: string;
+  line?: number | null;
+  reviewState?: string;
+  replyTo?: number | null;
+}
+export interface PullRequestComments {
+  comments: PullRequestComment[];
+  truncated: boolean;
+  canComment: boolean;
+  commentBlockReason: string;
+}
+export interface CreatePullRequestCommentInput {
+  body: string;
+}
 export interface BranchCleanup {
   branch: string;
   sha: string;
@@ -167,6 +189,15 @@ export interface PinkBridge {
     number: number,
     sha: string,
   ) => Promise<PullRequestFiles>;
+  getPullRequestComments: (
+    fullName: string,
+    number: number,
+  ) => Promise<PullRequestComments>;
+  createPullRequestComment: (
+    fullName: string,
+    number: number,
+    input: CreatePullRequestCommentInput,
+  ) => Promise<PullRequestComment>;
   deletePullRequestBranch: (
     fullName: string,
     number: number,

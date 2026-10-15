@@ -196,6 +196,7 @@ export function PullRequestWorkspace({
           number={selectedNumber}
           busyChanged={setBusy}
           refreshVersion={`${revision}:${selectedRow?.state ?? ""}:${selectedRow?.merged ?? ""}`}
+          commentsRefreshVersion={repo.fetchedAt}
           changed={(message) => {
             setRevision((n) => n + 1);
             changed(message);

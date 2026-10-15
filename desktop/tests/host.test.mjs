@@ -1030,3 +1030,179 @@ test("local PR workspace API preserves service conflicts and validation failures
   }
   assert.equal(calls, 6);
 });
+
+test("local conversation API loads a PR timeline and forwards the exact authored comment", async (t) => {
+  const calls = [];
+  const repo = "freddyrosa16/PinkLabs";
+  const body = "  Markdown indentation\n\nKeep trailing spaces.  \n";
+  const created = { id: "comment:42", kind: "comment", body };
+  const conversation = {
+    comments: [],
+    truncated: false,
+    canComment: true,
+    commentBlockReason: "",
+  };
+  const port = await serveAPI(t, {
+    getPullRequestComments: async (...args) => {
+      calls.push(["read", ...args]);
+      return conversation;
+    },
+    createPullRequestComment: async (...args) => {
+      calls.push(["write", ...args]);
+      return created;
+    },
+  });
+  const read = await requestAPI(
+    port,
+    `/api/pull-comments?${new URLSearchParams({ repo, number: "12" })}`,
+  );
+  assert.equal(read.status, 200);
+  assert.deepEqual(read.body, conversation);
+  const write = await requestAPI(port, "/api/pull-comments", {
+    method: "POST",
+    headers: {
+      origin: `http://127.0.0.1:${port}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ repo, number: 12, body }),
+  });
+  assert.equal(write.status, 200);
+  assert.deepEqual(write.body, created);
+  assert.equal(write.headers["cache-control"], "no-store");
+  assert.equal(write.headers["access-control-allow-origin"], undefined);
+  assert.deepEqual(calls, [
+    ["read", repo, 12],
+    ["write", repo, 12, { body }],
+  ]);
+});
+
+test("local conversation API rejects untrusted and malformed requests before any comment service call", async (t) => {
+  let calls = 0;
+  const never = async () => {
+    calls++;
+    return {};
+  };
+  const port = await serveAPI(t, {
+    getPullRequestComments: never,
+    createPullRequestComment: never,
+  });
+  const valid = {
+    repo: "freddyrosa16/PinkLabs",
+    number: 12,
+    body: "A comment",
+  };
+  const headers = {
+    origin: `http://127.0.0.1:${port}`,
+    "content-type": "application/json",
+  };
+  for (const query of [
+    "repo=owner%2F..&number=12",
+    "repo=owner%2Frepo&number=0",
+    "repo=owner%2Frepo&number=1e2",
+    "repo=owner%2Frepo",
+  ])
+    assert.equal(
+      (await requestAPI(port, `/api/pull-comments?${query}`)).status,
+      400,
+    );
+  const cases = [
+    {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      headers: { ...headers, origin: "https://evil.test" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      headers: { ...headers, "sec-fetch-site": "cross-site" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      headers: { ...headers, "content-type": "text/plain" },
+      body: JSON.stringify(valid),
+      status: 415,
+    },
+    ...["{broken", "[]", "null"].map((body) => ({
+      headers,
+      body,
+      status: 400,
+    })),
+    ...[
+      { body: " \n\t" },
+      { body: "x".repeat(65_537) },
+      { body: null },
+      { body: 5 },
+      { number: "12" },
+      { number: -1 },
+      { event: "APPROVE" },
+      { repo: "owner/.." },
+    ].map((fields) => ({
+      headers,
+      body: JSON.stringify({ ...valid, ...fields }),
+      status: 400,
+    })),
+    {
+      headers: { ...headers, "content-length": 270_000 },
+      body: "x".repeat(270_000),
+      status: 413,
+    },
+    {
+      headers: { ...headers, "transfer-encoding": "chunked" },
+      body: "x".repeat(270_000),
+      status: 413,
+    },
+  ];
+  for (const { status, ...options } of cases) {
+    const response = await requestAPI(port, "/api/pull-comments", {
+      method: "POST",
+      ...options,
+    });
+    assert.equal(response.status, status, response.body.error);
+  }
+  assert.equal(
+    (
+      await requestAPI(port, "/api/pull-comments", {
+        method: "DELETE",
+        headers,
+      })
+    ).status,
+    405,
+  );
+  assert.equal(calls, 0);
+});
+
+test("local conversation API preserves blocked and invalid statuses and surfaces ambiguous posts as failures", async (t) => {
+  let failureStatus;
+  const port = await serveAPI(t, {
+    createPullRequestComment: async () => {
+      throw Object.assign(new Error("Check the comments before retrying."), {
+        status: failureStatus,
+      });
+    },
+  });
+  for (const [status, expected] of [
+    [403, 403],
+    [422, 422],
+    [undefined, 502],
+  ]) {
+    failureStatus = status;
+    const response = await requestAPI(port, "/api/pull-comments", {
+      method: "POST",
+      headers: {
+        origin: `http://127.0.0.1:${port}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        repo: "freddyrosa16/PinkLabs",
+        number: 12,
+        body: "Hello",
+      }),
+    });
+    assert.equal(response.status, expected);
+    assert.equal(response.body.error, "Check the comments before retrying.");
+  }
+});

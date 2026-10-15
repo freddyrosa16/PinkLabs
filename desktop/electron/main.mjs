@@ -25,6 +25,8 @@ import {
   listPullRequests,
   getPullRequestFiles,
   deletePullRequestBranch,
+  getPullRequestComments,
+  createPullRequestComment,
 } from "../server/github.mjs";
 import {
   assertTrustedSender,
@@ -261,6 +263,12 @@ function installIPC() {
   );
   register("pink:pull-request-files", (repo, number, sha) =>
     getPullRequestFiles(validateRepositoryName(repo), number, sha),
+  );
+  register("pink:pull-request-comments", (repo, number) =>
+    getPullRequestComments(validateRepositoryName(repo), number),
+  );
+  register("pink:create-pull-request-comment", (repo, number, input) =>
+    createPullRequestComment(validateRepositoryName(repo), number, input),
   );
   register("pink:delete-pull-branch", (repo, number, input) =>
     deletePullRequestBranch(validateRepositoryName(repo), number, input),
