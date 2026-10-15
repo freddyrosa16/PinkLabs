@@ -93,18 +93,18 @@ test("initial load and overlapping refresh triggers share one in-flight request"
   assert.equal(h.clock.pendingTimers, 1);
 });
 
-test("active polling waits 30 seconds after completion and never overlaps a slow request", async (t) => {
+test("active polling waits two minutes after completion and never overlaps a slow request", async (t) => {
   const h = harness();
   t.after(() => h.sync.dispose());
   await flush();
   await h.clock.advance(8_000);
   h.requests[0].resolve(repository());
   await flush();
-  await h.clock.advance(29_999);
+  await h.clock.advance(119_999);
   assert.equal(h.requests.length, 1);
   await h.clock.advance(1);
   assert.equal(h.requests.length, 2);
-  await h.clock.advance(90_000);
+  await h.clock.advance(360_000);
   assert.equal(
     h.requests.length,
     2,
@@ -112,7 +112,7 @@ test("active polling waits 30 seconds after completion and never overlaps a slow
   );
   h.requests[1].resolve(repository("owner/repo", { openPrCount: 2 }));
   await flush();
-  await h.clock.advance(29_999);
+  await h.clock.advance(119_999);
   assert.equal(h.requests.length, 2);
   await h.clock.advance(1);
   assert.equal(h.requests.length, 3);
@@ -136,6 +136,7 @@ test("hiding the app stops polls and returning refetches without waiting for the
     2,
     "returning to the app should immediately fetch newer GitHub data",
   );
+  assert.equal(h.latest().loading, false, "resuming should update quietly");
   h.sync.setActive(true);
   const repeated = h.sync.refresh(false);
   assert.equal(h.requests.length, 2);
@@ -168,16 +169,23 @@ test("quick focus changes honor a five-second gap and hiding cancels the deferre
   assert.equal(h.requests.length, 2);
 });
 
-test("background refresh keeps existing data through loading and failure; manual retry can recover immediately", async (t) => {
+test("background refresh stays silent and retains data on failure; manual retry shows loading and recovers", async (t) => {
   const h = harness();
   t.after(() => h.sync.dispose());
   await flush();
   const original = repository();
   h.requests[0].resolve(original);
   await flush();
-  await h.clock.advance(30_000);
+  const publications = h.states.length;
+  await h.clock.advance(120_000);
+  assert.equal(h.requests.length, 2);
+  assert.equal(
+    h.states.length,
+    publications,
+    "a routine check must not publish a loading state",
+  );
   assert.strictEqual(h.latest().repo, original);
-  assert.equal(h.latest().loading, true);
+  assert.equal(h.latest().loading, false);
   h.requests[1].reject(new Error("GitHub temporarily unavailable"));
   await flush();
   assert.deepEqual(h.latest(), {
@@ -193,6 +201,11 @@ test("background refresh keeps existing data through loading and failure; manual
     "manual refresh should bypass the automatic failure backoff",
   );
   assert.strictEqual(h.latest().repo, original);
+  assert.equal(
+    h.latest().loading,
+    true,
+    "a requested refresh should show progress",
+  );
   const replacement = repository("owner/repo", { openPrCount: 2 });
   h.requests[2].resolve(replacement);
   await manual;
@@ -225,6 +238,139 @@ test("manual refresh bypasses the minimum gap and inactive state, while automati
   assert.equal(h.clock.pendingTimers, 0);
 });
 
+test("manual refresh joins a silent background request and shows loading without duplicating it", async (t) => {
+  const h = harness();
+  t.after(() => h.sync.dispose());
+  await flush();
+  const original = repository();
+  h.requests[0].resolve(original);
+  await flush();
+  await h.clock.advance(120_000);
+  assert.equal(h.latest().loading, false);
+  const background = h.sync.refresh(false);
+  const manual = h.sync.refresh();
+  assert.strictEqual(manual, background);
+  assert.equal(h.latest().loading, true);
+  assert.strictEqual(h.latest().repo, original);
+  await flush();
+  assert.equal(h.requests.length, 2);
+  h.requests[1].resolve(repository("owner/repo", { openPrCount: 2 }));
+  await manual;
+  assert.equal(h.latest().loading, false);
+  assert.equal(h.latest().repo.openPrCount, 2);
+});
+
+test("leaving GitHub pauses future polls while allowing a running read to finish; returning refreshes quietly", async (t) => {
+  const h = harness();
+  t.after(() => h.sync.dispose());
+  await flush();
+  h.requests[0].resolve(repository());
+  await flush();
+  await h.clock.advance(120_000);
+  assert.equal(h.requests.length, 2);
+  h.sync.setActive(false);
+  const updated = repository("owner/repo", { openPrCount: 3 });
+  h.requests[1].resolve(updated);
+  await flush();
+  assert.strictEqual(h.latest().repo, updated);
+  assert.equal(h.clock.pendingTimers, 0);
+  await h.clock.advance(600_000);
+  assert.equal(h.requests.length, 2);
+  h.sync.setActive(true);
+  await flush();
+  assert.equal(h.requests.length, 3);
+  assert.strictEqual(h.latest().repo, updated);
+  assert.equal(h.latest().loading, false);
+  h.requests[2].resolve(updated);
+  await flush();
+});
+
+test("a mutation during a read queues one quiet follow-up so the new pull request becomes visible", async (t) => {
+  const h = harness();
+  t.after(() => h.sync.dispose());
+  await flush();
+  const original = repository("owner/repo", { pulls: [{ number: 1 }] });
+  h.requests[0].resolve(original);
+  await flush();
+  await h.clock.advance(120_000);
+  assert.equal(h.requests.length, 2);
+  const publications = h.states.length;
+  let settled = false;
+  const afterMutation = h.sync.refreshAfterChange().then(() => {
+    settled = true;
+  });
+  const anotherMutation = h.sync.refreshAfterChange();
+  await flush();
+  assert.equal(
+    h.requests.length,
+    2,
+    "the follow-up must wait for the old read",
+  );
+  assert.equal(h.states.length, publications);
+  h.requests[1].resolve(original);
+  await flush();
+  assert.equal(
+    h.requests.length,
+    3,
+    "mutations before completion share one fresh read",
+  );
+  assert.equal(
+    settled,
+    false,
+    "mutation refresh finishes only after fresh data arrives",
+  );
+  assert.strictEqual(h.latest().repo, original);
+  assert.equal(h.latest().loading, false);
+  const changed = repository("owner/repo", {
+    openPrCount: 2,
+    pulls: [{ number: 2 }, { number: 1 }],
+  });
+  h.requests[2].resolve(changed);
+  await Promise.all([afterMutation, anotherMutation]);
+  assert.equal(h.latest().repo.pulls[0].number, 2);
+  assert.equal(h.latest().repo.openPrCount, 2);
+  assert.equal(
+    h.states.slice(publications).some((state) => state.loading),
+    false,
+  );
+});
+
+test("post-mutation refresh bypasses the gap, backoff, and paused state without showing loading", async (t) => {
+  const h = harness();
+  t.after(() => h.sync.dispose());
+  await flush();
+  const partial = repository("owner/repo", { refreshIncomplete: true });
+  h.requests[0].resolve(partial);
+  await flush();
+  h.sync.setActive(false);
+  const refresh = h.sync.refreshAfterChange();
+  await flush();
+  assert.equal(h.requests.length, 2);
+  assert.strictEqual(h.latest().repo, partial);
+  assert.equal(h.latest().loading, false);
+  h.requests[1].resolve(repository());
+  await refresh;
+  assert.equal(
+    h.clock.pendingTimers,
+    0,
+    "one explicit read must not resume paused polling",
+  );
+});
+
+test("disposing a lifecycle drops its queued post-mutation read", async () => {
+  const h = harness();
+  await flush();
+  const refresh = h.sync.refreshAfterChange();
+  h.sync.dispose();
+  const publications = h.states.length;
+  h.requests[0].resolve(repository());
+  await refresh;
+  await flush();
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.states.length, publications);
+  assert.equal(h.clock.pendingTimers, 0);
+});
+
 test("disposing an old repository lifecycle ignores its late result and removes future work", async (t) => {
   const clock = controlledClock();
   const old = harness({ clock });
@@ -251,11 +397,11 @@ test("disposing an old repository lifecycle ignores its late result and removes 
   assert.equal(current.requests.length, 1);
 });
 
-test("request failures back off from 60 seconds to five minutes, then reset after recovery", async (t) => {
+test("request failures back off from four to five minutes, then reset after recovery", async (t) => {
   const h = harness();
   t.after(() => h.sync.dispose());
   await flush();
-  for (const delay of [60_000, 120_000, 240_000, 300_000, 300_000]) {
+  for (const delay of [240_000, 300_000, 300_000, 300_000, 300_000]) {
     const count = h.requests.length;
     h.requests.at(-1).reject(new Error("GitHub rate limit reached"));
     await flush();
@@ -274,7 +420,7 @@ test("request failures back off from 60 seconds to five minutes, then reset afte
   h.requests.at(-1).resolve(repository());
   await flush();
   const recoveredCount = h.requests.length;
-  await h.clock.advance(29_999);
+  await h.clock.advance(119_999);
   assert.equal(h.requests.length, recoveredCount);
   await h.clock.advance(1);
   assert.equal(
@@ -295,19 +441,19 @@ test("partial endpoint warnings keep usable data visible but trigger slower retr
   h.requests[0].resolve(partial);
   await flush();
   assert.deepEqual(h.latest(), { repo: partial, loading: false, error: null });
-  await h.clock.advance(59_999);
+  await h.clock.advance(239_999);
   assert.equal(h.requests.length, 1);
   await h.clock.advance(1);
   assert.equal(h.requests.length, 2);
   h.requests[1].resolve(partial);
   await flush();
-  await h.clock.advance(119_999);
+  await h.clock.advance(299_999);
   assert.equal(h.requests.length, 2);
   await h.clock.advance(1);
   assert.equal(h.requests.length, 3);
   h.requests[2].resolve(repository());
   await flush();
-  await h.clock.advance(30_000);
+  await h.clock.advance(120_000);
   assert.equal(h.requests.length, 4);
 });
 
@@ -322,7 +468,7 @@ test("informational notices do not slow updates for otherwise complete repositor
     }),
   );
   await flush();
-  await h.clock.advance(29_999);
+  await h.clock.advance(119_999);
   assert.equal(h.requests.length, 1);
   await h.clock.advance(1);
   assert.equal(h.requests.length, 2);

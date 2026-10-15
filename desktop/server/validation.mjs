@@ -32,6 +32,108 @@ export function validateRepositoryName(value) {
   return value;
 }
 
+function inputError(message) {
+  return Object.assign(new Error(message), { status: 400 });
+}
+
+export function validateBranchName(value) {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    value.length > 255 ||
+    value === "@" ||
+    value.startsWith("-") ||
+    value.endsWith(".") ||
+    /[\u0000-\u0020\u007f~^:?*\[\\]/.test(value) ||
+    value.includes("..") ||
+    value.includes("@{") ||
+    value
+      .split("/")
+      .some((part) => !part || part.startsWith(".") || part.endsWith(".lock"))
+  )
+    throw inputError(
+      "Choose a valid branch from this repository (up to 255 characters).",
+    );
+  return value;
+}
+
+function inputObject(value, keys) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !keys.includes(key))
+  ) {
+    throw inputError("Invalid pull request fields.");
+  }
+  return value;
+}
+
+export function validateComparisonInput(value) {
+  const input = inputObject(value, ["base", "head"]);
+  return {
+    base: validateBranchName(input.base),
+    head: validateBranchName(input.head),
+  };
+}
+
+export function validatePullRequestInput(value) {
+  const input = inputObject(value, ["base", "head", "title", "body", "draft"]);
+  const { base, head } = validateComparisonInput({
+    base: input.base,
+    head: input.head,
+  });
+  if (base === head)
+    throw inputError("Choose different base and head branches.");
+  if (
+    typeof input.title !== "string" ||
+    !input.title.trim() ||
+    input.title.length > 256 ||
+    /[\u0000-\u001f\u007f]/.test(input.title)
+  ) {
+    throw inputError(
+      "Add a pull request title of 1–256 characters on one line.",
+    );
+  }
+  if (
+    typeof input.body !== "string" ||
+    input.body.length > 60_000 ||
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(input.body)
+  ) {
+    throw inputError(
+      "The description must be text with at most 60,000 characters.",
+    );
+  }
+  if (typeof input.draft !== "boolean")
+    throw inputError("Choose whether this is a draft pull request.");
+  return {
+    base,
+    head,
+    title: input.title.trim(),
+    body: input.body,
+    draft: input.draft,
+  };
+}
+
+export function validatePullRequestNumber(value) {
+  if (!Number.isSafeInteger(value) || value < 1)
+    throw inputError("Choose a valid pull request number.");
+  return value;
+}
+
+export function validateMergeInput(value) {
+  const input = inputObject(value, ["sha", "base", "method"]);
+  if (typeof input.sha !== "string" || !/^[a-f\d]{40}$/i.test(input.sha))
+    throw inputError("Refresh this pull request to get its latest commit.");
+  if (!["merge", "squash", "rebase"].includes(input.method))
+    throw inputError("Choose merge, squash, or rebase.");
+  return {
+    sha: input.sha.toLowerCase(),
+    base: validateBranchName(input.base),
+    method: input.method,
+  };
+}
+
 export function validateExternalURL(value) {
   if (
     typeof value !== "string" ||

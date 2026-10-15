@@ -22,6 +22,49 @@ export interface PullRequest {
   draft: boolean;
   branch: string;
 }
+export type MergeMethod = "merge" | "squash" | "rebase";
+export interface PullRequestDetail extends PullRequest {
+  body: string;
+  state: "open" | "closed";
+  merged: boolean;
+  base: string;
+  headSha: string;
+  mergeable: boolean | null;
+  mergeState: string;
+  canMerge: boolean;
+  mergeBlockReason: string;
+  mergeMethods: MergeMethod[];
+  checks: { name: string; status: Status; url: string }[];
+  checksIncomplete: boolean;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  commits: number;
+}
+export interface MergePullRequestInput {
+  sha: string;
+  base: string;
+  method: MergeMethod;
+}
+export interface MergePullRequestResult {
+  merged: true;
+  sha: string;
+}
+export interface BranchSelection {
+  base: string;
+  head: string;
+}
+export interface PullRequestInput extends BranchSelection {
+  title: string;
+  body: string;
+  draft: boolean;
+}
+export interface BranchComparison {
+  aheadBy: number;
+  behindBy: number;
+  commitCount: number;
+  existingPull: PullRequest | null;
+}
 export interface Repository {
   fullName: string;
   name: string;
@@ -62,6 +105,24 @@ export interface RepoSummary {
 export interface PinkBridge {
   repository: (fullName: string) => Promise<Repository>;
   repositories: () => Promise<RepoSummary[]>;
+  listBranches: (fullName: string) => Promise<string[]>;
+  compareBranches: (
+    fullName: string,
+    selection: BranchSelection,
+  ) => Promise<BranchComparison>;
+  createPullRequest: (
+    fullName: string,
+    input: PullRequestInput,
+  ) => Promise<PullRequest>;
+  getPullRequest: (
+    fullName: string,
+    number: number,
+  ) => Promise<PullRequestDetail>;
+  mergePullRequest: (
+    fullName: string,
+    number: number,
+    input: MergePullRequestInput,
+  ) => Promise<MergePullRequestResult>;
   openExternal: (url: string) => Promise<void>;
   writeClipboard: (text: string) => Promise<void>;
   clone: (fullName: string) => Promise<{ canceled: boolean; path?: string }>;

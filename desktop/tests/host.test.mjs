@@ -178,7 +178,11 @@ test("custom protocol resolves only assets under the built client directory", ()
   assert.equal(containedPath(root, path.join(root, "../secret")), false);
 });
 
-function requestAPI(port, pathname, { method = "GET", headers = {} } = {}) {
+function requestAPI(
+  port,
+  pathname,
+  { method = "GET", headers = {}, body } = {},
+) {
   return new Promise((resolve, reject) => {
     const request = http.request(
       { hostname: "127.0.0.1", port, path: pathname, method, headers },
@@ -198,7 +202,7 @@ function requestAPI(port, pathname, { method = "GET", headers = {} } = {}) {
       },
     );
     request.on("error", reject);
-    request.end();
+    request.end(body);
   });
 }
 
@@ -276,4 +280,474 @@ test("local HTTP API returns repository data and blocks cross-origin reads and w
   );
   assert.equal((await requestAPI(port, "/api/clone")).status, 404);
   assert.deepEqual(seen, ["freddyrosa16/PinkLabs"]);
+});
+
+async function serveAPI(t, services) {
+  const middleware = createApiMiddleware(services);
+  const server = http.createServer((request, response) =>
+    middleware(request, response, () => {
+      response.writeHead(404);
+      response.end("{}");
+    }),
+  );
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  return server.address().port;
+}
+
+test("local PR API forwards branch comparisons and one validated JSON creation", async (t) => {
+  const calls = [];
+  const pull = { number: 2, title: "Add PR flow", draft: true };
+  const comparison = {
+    aheadBy: 2,
+    behindBy: 0,
+    commitCount: 2,
+    existingPull: null,
+  };
+  const port = await serveAPI(t, {
+    listBranches: async (repo) => {
+      calls.push(["branches", repo]);
+      return ["main", "codex/pr-flow"];
+    },
+    compareBranches: async (repo, input) => {
+      calls.push(["compare", repo, input]);
+      return comparison;
+    },
+    createPullRequest: async (repo, input) => {
+      calls.push(["create", repo, input]);
+      return pull;
+    },
+  });
+  const repo = "freddyrosa16/PinkLabs";
+  assert.deepEqual(
+    (await requestAPI(port, `/api/branches?repo=${encodeURIComponent(repo)}`))
+      .body,
+    ["main", "codex/pr-flow"],
+  );
+  assert.deepEqual(
+    (
+      await requestAPI(
+        port,
+        `/api/compare?repo=${encodeURIComponent(repo)}&base=main&head=codex%2Fpr-flow`,
+      )
+    ).body,
+    comparison,
+  );
+  const input = {
+    base: "main",
+    head: "codex/pr-flow",
+    title: " Add PR flow ",
+    body: "## Changes\n\nLiteral `$(example)` stays text.",
+    draft: true,
+  };
+  const created = await requestAPI(port, "/api/pulls", {
+    method: "POST",
+    headers: {
+      origin: `http://127.0.0.1:${port}`,
+      "content-type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify({ repo, ...input }),
+  });
+  assert.equal(created.status, 200);
+  assert.deepEqual(created.body, pull);
+  assert.equal(created.headers["cache-control"], "no-store");
+  assert.equal(created.headers["access-control-allow-origin"], undefined);
+  assert.deepEqual(calls, [
+    ["branches", repo],
+    ["compare", repo, { base: "main", head: "codex/pr-flow" }],
+    ["create", repo, { ...input, title: "Add PR flow" }],
+  ]);
+});
+
+test("local PR API rejects cross-origin, malformed, unsupported, and oversized writes before service calls", async (t) => {
+  let calls = 0;
+  const port = await serveAPI(t, {
+    createPullRequest: async () => {
+      calls++;
+      return {};
+    },
+  });
+  const valid = {
+    repo: "freddyrosa16/PinkLabs",
+    base: "main",
+    head: "codex/pr-flow",
+    title: "Add PR flow",
+    body: "",
+    draft: false,
+  };
+  const headers = {
+    origin: `http://127.0.0.1:${port}`,
+    "content-type": "application/json",
+  };
+  const cases = [
+    {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      headers: { ...headers, origin: "https://evil.test" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      headers: { ...headers, "sec-fetch-site": "cross-site" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      headers: { ...headers, "content-type": "text/plain" },
+      body: JSON.stringify(valid),
+      status: 415,
+    },
+    { headers, body: "{broken", status: 400 },
+    { headers, body: "[]", status: 400 },
+    {
+      headers,
+      body: JSON.stringify({ ...valid, repo: "owner/.." }),
+      status: 400,
+    },
+    {
+      headers,
+      body: JSON.stringify({ ...valid, head: "owner:fork" }),
+      status: 400,
+    },
+    {
+      headers,
+      body: JSON.stringify({ ...valid, draft: "false" }),
+      status: 400,
+    },
+    {
+      headers,
+      body: JSON.stringify({ ...valid, unexpected: "field" }),
+      status: 400,
+    },
+    {
+      headers,
+      body: JSON.stringify({ ...valid, body: "x".repeat(60_001) }),
+      status: 400,
+    },
+    {
+      headers: { ...headers, "content-length": 270_000 },
+      body: "x".repeat(270_000),
+      status: 413,
+    },
+    {
+      headers: { ...headers, "transfer-encoding": "chunked" },
+      body: "x".repeat(270_000),
+      status: 413,
+    },
+  ];
+  for (const { status, ...options } of cases) {
+    const response = await requestAPI(port, "/api/pulls", {
+      method: "POST",
+      ...options,
+    });
+    assert.equal(response.status, status, response.body.error);
+    assert.equal(typeof response.body.error, "string");
+  }
+  assert.equal(
+    (
+      await requestAPI(port, "/api/pulls", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(valid),
+      })
+    ).status,
+    405,
+  );
+  assert.equal(calls, 0);
+});
+
+test("local PR API forwards useful service failures without reporting success", async (t) => {
+  let calls = 0;
+  const port = await serveAPI(t, {
+    createPullRequest: async () => {
+      calls++;
+      throw Object.assign(new Error("The head branch has no new commits."), {
+        status: 422,
+      });
+    },
+  });
+  const response = await requestAPI(port, "/api/pulls", {
+    method: "POST",
+    headers: {
+      origin: `http://127.0.0.1:${port}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repo: "freddyrosa16/PinkLabs",
+      base: "main",
+      head: "codex/pr-flow",
+      title: "Add PR flow",
+      body: "",
+      draft: false,
+    }),
+  });
+  assert.equal(response.status, 422);
+  assert.deepEqual(response.body, {
+    error: "The head branch has no new commits.",
+  });
+  assert.equal(calls, 1);
+});
+
+test("local merge API forwards PR numbers and the exact validated merge payload", async (t) => {
+  const calls = [];
+  const repo = "freddyrosa16/PinkLabs";
+  const pull = {
+    number: 27,
+    title: "Review this change",
+    base: "release/next",
+    headSha: "a".repeat(40),
+    canMerge: true,
+  };
+  const merged = { merged: true, sha: "b".repeat(40) };
+  const port = await serveAPI(t, {
+    getPullRequest: async (...args) => {
+      calls.push(["get", ...args]);
+      return pull;
+    },
+    mergePullRequest: async (...args) => {
+      calls.push(["merge", ...args]);
+      return merged;
+    },
+  });
+  const detail = await requestAPI(
+    port,
+    `/api/pull?repo=${encodeURIComponent(repo)}&number=27`,
+  );
+  assert.equal(detail.status, 200);
+  assert.deepEqual(detail.body, pull);
+  assert.equal(detail.headers["cache-control"], "no-store");
+  const result = await requestAPI(port, "/api/merge", {
+    method: "POST",
+    headers: {
+      origin: `http://127.0.0.1:${port}`,
+      "content-type": "application/json; charset=utf-8",
+      "sec-fetch-site": "same-origin",
+    },
+    body: JSON.stringify({
+      repo,
+      number: 27,
+      sha: "A".repeat(40),
+      base: "release/next",
+      method: "squash",
+    }),
+  });
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, merged);
+  assert.equal(result.headers["cache-control"], "no-store");
+  assert.equal(result.headers["access-control-allow-origin"], undefined);
+  assert.deepEqual(calls, [
+    ["get", repo, 27],
+    [
+      "merge",
+      repo,
+      27,
+      { sha: "a".repeat(40), base: "release/next", method: "squash" },
+    ],
+  ]);
+});
+
+test("local PR detail API rejects invalid numbers and cross-origin reads before the service", async (t) => {
+  let calls = 0;
+  const port = await serveAPI(t, {
+    getPullRequest: async () => {
+      calls++;
+      return {};
+    },
+  });
+  const pathname = "/api/pull?repo=freddyrosa16%2FPinkLabs";
+  for (const number of [
+    "",
+    "0",
+    "-1",
+    "01",
+    "1.5",
+    "1e2",
+    "Infinity",
+    "9007199254740992",
+    "27/merge",
+  ]) {
+    const response = await requestAPI(
+      port,
+      `${pathname}&number=${encodeURIComponent(number)}`,
+    );
+    assert.equal(response.status, 400, `Invalid number ${number}`);
+  }
+  assert.equal((await requestAPI(port, pathname)).status, 400);
+  assert.equal(
+    (await requestAPI(port, "/api/pull?repo=owner%2F..&number=27")).status,
+    400,
+  );
+  for (const headers of [
+    { origin: "https://evil.test" },
+    { "sec-fetch-site": "cross-site" },
+    { host: `evil.test:${port}` },
+  ]) {
+    assert.equal(
+      (await requestAPI(port, `${pathname}&number=27`, { headers })).status,
+      403,
+    );
+  }
+  assert.equal(
+    (await requestAPI(port, `${pathname}&number=27`, { method: "POST" }))
+      .status,
+    405,
+  );
+  assert.equal(calls, 0);
+});
+
+test("local merge API rejects untrusted, invalid, malformed, and oversized writes before the service", async (t) => {
+  let calls = 0;
+  const port = await serveAPI(t, {
+    mergePullRequest: async () => {
+      calls++;
+      return { merged: true };
+    },
+  });
+  const valid = {
+    repo: "freddyrosa16/PinkLabs",
+    number: 27,
+    sha: "a".repeat(40),
+    base: "main",
+    method: "merge",
+  };
+  const headers = {
+    origin: `http://127.0.0.1:${port}`,
+    "content-type": "application/json",
+  };
+  const invalidFields = [
+    { repo: "owner/.." },
+    { number: undefined },
+    { number: 0 },
+    { number: -1 },
+    { number: 1.5 },
+    { number: "27" },
+    { number: null },
+    { number: Number.MAX_SAFE_INTEGER + 1 },
+    { sha: undefined },
+    { sha: null },
+    { sha: 123 },
+    { sha: "a".repeat(7) },
+    { sha: "a".repeat(41) },
+    { sha: "g".repeat(40) },
+    { base: undefined },
+    { base: "" },
+    { base: "../main" },
+    { base: "-main" },
+    { base: "owner:main" },
+    { method: undefined },
+    { method: "admin" },
+    { method: "SQUASH" },
+    { admin: true },
+    { bypass_rules: true },
+    { merge_action: "direct_merge" },
+  ];
+  const cases = [
+    {
+      label: "missing origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      label: "cross origin",
+      headers: { ...headers, origin: "https://evil.test" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      label: "cross-site fetch",
+      headers: { ...headers, "sec-fetch-site": "cross-site" },
+      body: JSON.stringify(valid),
+      status: 403,
+    },
+    {
+      label: "unsupported content type",
+      headers: { ...headers, "content-type": "text/plain" },
+      body: JSON.stringify(valid),
+      status: 415,
+    },
+    ...["{broken", "[]", "null", '"text"'].map((body) => ({
+      label: `invalid JSON object ${body}`,
+      headers,
+      body,
+      status: 400,
+    })),
+    ...invalidFields.map((fields) => ({
+      label: `invalid fields ${Object.keys(fields).join(",")}: ${JSON.stringify(fields)}`,
+      headers,
+      body: JSON.stringify({ ...valid, ...fields }),
+      status: 400,
+    })),
+    {
+      label: "oversized declared body",
+      headers: { ...headers, "content-length": 270_000 },
+      body: "x".repeat(270_000),
+      status: 413,
+    },
+    {
+      label: "oversized chunked body",
+      headers: { ...headers, "transfer-encoding": "chunked" },
+      body: "x".repeat(270_000),
+      status: 413,
+    },
+  ];
+  for (const { label, status, ...options } of cases) {
+    const response = await requestAPI(port, "/api/merge", {
+      method: "POST",
+      ...options,
+    });
+    assert.equal(response.status, status, label);
+    assert.equal(typeof response.body.error, "string", label);
+    assert.equal(calls, 0, `${label} reached the merge service`);
+  }
+  assert.equal(
+    (
+      await requestAPI(port, "/api/merge", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(valid),
+      })
+    ).status,
+    405,
+  );
+  assert.equal(calls, 0);
+});
+
+test("local merge API preserves actionable service errors for blocked, stale, and invalid merges", async (t) => {
+  let calls = 0;
+  let serviceStatus;
+  const port = await serveAPI(t, {
+    mergePullRequest: async () => {
+      calls++;
+      throw Object.assign(new Error(`Merge rejected with ${serviceStatus}.`), {
+        status: serviceStatus,
+      });
+    },
+  });
+  for (const status of [405, 409, 422]) {
+    serviceStatus = status;
+    const response = await requestAPI(port, "/api/merge", {
+      method: "POST",
+      headers: {
+        origin: `http://127.0.0.1:${port}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        repo: "freddyrosa16/PinkLabs",
+        number: 27,
+        sha: "a".repeat(40),
+        base: "main",
+        method: "rebase",
+      }),
+    });
+    assert.equal(response.status, status);
+    assert.deepEqual(response.body, {
+      error: `Merge rejected with ${status}.`,
+    });
+  }
+  assert.equal(calls, 3);
 });

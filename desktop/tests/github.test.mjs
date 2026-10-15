@@ -156,6 +156,47 @@ test("normalizes live endpoint shapes into the frontend contract", async () => {
   assert.equal(repo.refreshIncomplete, false);
 });
 
+test("open PR count includes loaded rows when GitHub search lags and retains larger totals", async () => {
+  const countEndpoint =
+    "search/issues?q=repo%3Afreddy%2FPinkLabs%20is%3Apr%20is%3Aopen&per_page=1";
+  const pullsEndpoint =
+    "repos/freddy/PinkLabs/pulls?state=open&sort=updated&direction=desc&per_page=100";
+  const lagging = await service({
+    [countEndpoint]: { total_count: 0 },
+  }).getRepository("freddy/PinkLabs");
+  assert.equal(lagging.pulls.length, 1);
+  assert.equal(lagging.openPrCount, 1);
+
+  const largerTotal = await service({
+    [countEndpoint]: { total_count: 120 },
+    [pullsEndpoint]: Array.from({ length: 100 }, (_, i) => ({
+      ...fixtures[pullsEndpoint][0],
+      number: i + 1,
+    })),
+  }).getRepository("freddy/PinkLabs");
+  assert.equal(largerTotal.pulls.length, 100);
+  assert.equal(largerTotal.openPrCount, 120);
+
+  const merged = await service({
+    [countEndpoint]: { total_count: 1 },
+    [pullsEndpoint]: [],
+  }).getRepository("freddy/PinkLabs");
+  assert.equal(
+    merged.openPrCount,
+    0,
+    "an empty live list overrides a stale search index after merging",
+  );
+  const failed = await service({
+    [countEndpoint]: { total_count: 1 },
+    [pullsEndpoint]: new Error("unavailable"),
+  }).getRepository("freddy/PinkLabs");
+  assert.equal(
+    failed.openPrCount,
+    1,
+    "a failed list still uses the search total",
+  );
+});
+
 test("missing optional resources remain absent and failed endpoints produce honest warnings", async () => {
   const unavailable = Object.assign(new Error("secret should not escape"), {
     status: 403,
