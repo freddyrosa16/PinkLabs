@@ -153,6 +153,7 @@ test("normalizes live endpoint shapes into the frontend contract", async () => {
   );
   assert.equal(repo.starsThisMonth, 4);
   assert.deepEqual(repo.warnings, []);
+  assert.equal(repo.refreshIncomplete, false);
 });
 
 test("missing optional resources remain absent and failed endpoints produce honest warnings", async () => {
@@ -175,6 +176,55 @@ test("missing optional resources remain absent and failed endpoints produce hone
   assert.ok(repo.warnings.some((w) => w.includes("Languages")));
   assert.ok(repo.warnings.some((w) => w.includes("Star history")));
   assert.ok(repo.warnings.every((w) => !w.includes("secret")));
+  assert.equal(repo.refreshIncomplete, true);
+});
+
+test("expected missing resources do not classify a successful refresh as incomplete", async () => {
+  const repo = await service({
+    "repos/freddy/PinkLabs/readme": notFound(),
+    "repos/freddy/PinkLabs/releases/latest": notFound(),
+    "user/starred/freddy/PinkLabs": notFound(),
+    "repos/freddy/PinkLabs/commits?sha=main&per_page=7": Object.assign(
+      new Error("Empty repository"),
+      { status: 409 },
+    ),
+  }).getRepository("freddy/PinkLabs");
+  assert.equal(repo.refreshIncomplete, false);
+  assert.deepEqual(repo.warnings, []);
+  assert.equal(repo.readme, "");
+  assert.equal(repo.release, null);
+  assert.equal(repo.viewerStarred, false);
+  assert.deepEqual(repo.commits, []);
+});
+
+test("truncation and unsupported formats remain informational, rather than network refresh failures", async () => {
+  const pullEndpoint =
+    "repos/freddy/PinkLabs/pulls?state=open&sort=updated&direction=desc&per_page=100";
+  const cases = [
+    {
+      [pullEndpoint]: Array.from({ length: 100 }, (_, index) => ({
+        ...fixtures[pullEndpoint][0],
+        number: index + 1,
+      })),
+      "search/issues?q=repo%3Afreddy%2FPinkLabs%20is%3Apr%20is%3Aopen&per_page=1":
+        { total_count: 120 },
+    },
+    { "repos/freddy/PinkLabs/readme": { encoding: "none", content: "" } },
+    {
+      "repos/freddy/PinkLabs/stargazers/history?per_page=6": [
+        { week: "unsupported", days: [] },
+      ],
+    },
+  ];
+  for (const overrides of cases) {
+    const repo = await service(overrides).getRepository("freddy/PinkLabs");
+    assert.ok(repo.warnings.length > 0);
+    assert.equal(
+      repo.refreshIncomplete,
+      false,
+      "informational notices must not slow automatic updates",
+    );
+  }
 });
 
 test("CI considers check failures and distinguishes no CI from pending or passing", async () => {
@@ -226,6 +276,7 @@ test("an unavailable CI endpoint cannot claim an overall pass", async () => {
   }).getRepository("freddy/PinkLabs");
   assert.equal(repo.ciStatus, "none");
   assert.ok(repo.warnings.some((w) => w.includes("CI")));
+  assert.equal(repo.refreshIncomplete, true);
 });
 
 test("CI reads later check-run pages so a failure cannot hide beyond the first hundred", async () => {
@@ -245,6 +296,11 @@ test("CI reads later check-run pages so a failure cannot hide beyond the first h
       },
   }).getRepository("freddy/PinkLabs");
   assert.equal(repo.ciStatus, "failure");
+  assert.equal(
+    repo.refreshIncomplete,
+    false,
+    "a completed failing check is data, not a failed API refresh",
+  );
 });
 
 test("root failures are sanitized and distinguish missing access from optional failure", async () => {

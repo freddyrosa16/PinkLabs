@@ -175,7 +175,11 @@ export function GitHubView({
           <div className="error-banner" role="alert">
             <XCircleIcon />
             <div>
-              <strong>Couldn’t load this repository</strong>
+              <strong>
+                {repo
+                  ? "Couldn’t update GitHub — showing the last result"
+                  : "Couldn’t load this repository"}
+              </strong>
               <p>{error}</p>
             </div>
             <button className="button" onClick={refresh}>

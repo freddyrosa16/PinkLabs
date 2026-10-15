@@ -14,3 +14,4 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Sidebar: Pink Labs, New Chat, Agents, Pull Requests, GitHub, IDE, collapsible Projects and Sessions. Support removing projects and deleting conversations from either list.
 - Show the selected Claude, OpenAI/Codex, or Grok provider icon beside conversations. Running titles use a gray shimmer moving left to right, with reduced-motion support.
 - Freddy is building the Python agent through Boot.dev. Keep practice chat clearly labeled until a real backend is connected; do not replace his learning work with an unsolicited agent implementation. Agents details are intentionally deferred.
+- GitHub should update automatically when returning to the app and while actively using it. Preserve the displayed repository during refreshes, coalesce repeated triggers, and pause or back off polling when inactive or unavailable.

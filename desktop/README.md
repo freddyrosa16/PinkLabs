@@ -7,6 +7,7 @@ Think of the interface as the dashboard of a car. It already has buttons, screen
 ## What works now
 
 - **GitHub:** choose a repository, read its description, topics, README, languages, recent commits, CI results, open pull requests and authors, releases, contributors, and star history. These come from GitHub, using your existing GitHub CLI sign-in.
+- **Automatic updates:** returning to the app or reopening its GitHub views requests fresh data. While the window is visible, focused, and online, it checks again 30 seconds after each completed request. Hidden or inactive windows pause polling. Background updates keep the current screen visible; failures retry more slowly, and Refresh still works manually. These are periodic GitHub checks, not instant push notifications.
 - **Repository actions:** copy the clone URL, download a ZIP, open GitHub, and open its fork page. The desktop window can clone into a folder you choose. Star changes and forks are completed on GitHub.
 - **Projects:** add a project, optionally attach a GitHub repository and a local folder, expand its conversations, and remove it from the sidebar. Removing a project keeps its conversations in Sessions and leaves your files alone.
 - **Sessions:** create a conversation, select Claude, OpenAI / Codex, or Grok, see that provider’s icon, stop the practice reply, reopen conversations, and delete them from either sidebar location. Use **Undo** in the deletion notification to restore a conversation you just removed.

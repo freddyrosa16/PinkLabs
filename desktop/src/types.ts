@@ -50,6 +50,7 @@ export interface Repository {
   starHistory: { date: string; count: number }[];
   starsThisMonth: number | null;
   warnings: string[];
+  refreshIncomplete: boolean;
   fetchedAt: string;
 }
 export interface RepoSummary {

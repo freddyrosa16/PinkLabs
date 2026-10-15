@@ -196,14 +196,17 @@ export function createGitHubService({
       );
 
     const warnings = [];
+    let refreshIncomplete = false;
     const branch = metadata.default_branch || "main";
     const fetchedAt = now();
     async function optional(label, endpoint, fallback, missingCodes = []) {
       try {
         return await request(endpoint);
       } catch (error) {
-        if (!missingCodes.includes(error.status))
+        if (!missingCodes.includes(error.status)) {
+          refreshIncomplete = true;
           warnings.push(`${label} could not be loaded from GitHub.`);
+        }
         return fallback;
       }
     }
@@ -290,6 +293,7 @@ export function createGitHubService({
       }
       const status = mergeStatuses(statuses);
       if (unavailable) {
+        refreshIncomplete = true;
         warnings.push(
           `CI is partially unavailable for commit ${sha.slice(0, 7)}.`,
         );
@@ -399,6 +403,7 @@ export function createGitHubService({
       ciStatus: commits[0]?.status || "none",
       ...stars,
       warnings: [...new Set(warnings)],
+      refreshIncomplete,
       fetchedAt: fetchedAt.toISOString(),
     };
   }

@@ -1,4 +1,5 @@
 import type { Repository, RepoSummary } from "./types";
+const pendingRepositories = new Map<string, Promise<Repository>>();
 async function get<T>(path: string): Promise<T> {
   const response = await fetch(path);
   const data = await response.json();
@@ -7,10 +8,17 @@ async function get<T>(path: string): Promise<T> {
   return data;
 }
 export const api = {
-  repository: (repo: string) =>
-    window.pink
-      ? window.pink.repository(repo)
-      : get<Repository>(`/api/repository?repo=${encodeURIComponent(repo)}`),
+  repository: (repo: string) => {
+    const existing = pendingRepositories.get(repo);
+    if (existing) return existing;
+    const request = (
+      window.pink
+        ? window.pink.repository(repo)
+        : get<Repository>(`/api/repository?repo=${encodeURIComponent(repo)}`)
+    ).finally(() => pendingRepositories.delete(repo));
+    pendingRepositories.set(repo, request);
+    return request;
+  },
   repositories: () =>
     window.pink
       ? window.pink.repositories()

@@ -30,7 +30,8 @@ import {
   type Workspace,
   type Session,
 } from "./store";
-import type { Provider, Repository, RepoSummary } from "./types";
+import type { Provider, RepoSummary } from "./types";
+import { useRepository } from "./useRepository";
 const providers: { id: Provider; name: string; asset: string }[] = [
   { id: "claude", name: "Claude", asset: "claude-color.svg" },
   { id: "openai", name: "OpenAI / Codex", asset: "openai.svg" },
@@ -58,10 +59,9 @@ export function App() {
   const [view, setView] = useState("github");
   const [tab, setTab] = useState("overview");
   const [sidebar, setSidebar] = useState(true);
-  const [repo, setRepo] = useState<Repository | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
+  const { repo, loading, error, refresh, refreshIfStale } = useRepository(
+    workspace.repo,
+  );
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [sessionsOpen, setSessionsOpen] = useState(true);
   const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
@@ -97,25 +97,8 @@ export function App() {
     }
   }, [workspace]);
   useEffect(() => {
-    let canceled = false;
-    setLoading(true);
-    setError(null);
-    setRepo(null);
-    api
-      .repository(workspace.repo)
-      .then((r) => {
-        if (!canceled) setRepo(r);
-      })
-      .catch((e) => {
-        if (!canceled) setError(e.message);
-      })
-      .finally(() => {
-        if (!canceled) setLoading(false);
-      });
-    return () => {
-      canceled = true;
-    };
-  }, [workspace.repo, revision]);
+    if (view === "github" || view === "pulls") refreshIfStale();
+  }, [view, tab, refreshIfStale]);
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
@@ -455,7 +438,9 @@ export function App() {
           <span className={`connection-dot ${error ? "offline" : ""}`} />
           <span>
             {loading
-              ? "Syncing GitHub…"
+              ? repo
+                ? "Updating GitHub…"
+                : "Syncing GitHub…"
               : error
                 ? "GitHub unavailable"
                 : "Connected to GitHub"}
@@ -463,8 +448,9 @@ export function App() {
           {repo && (
             <button
               className="icon-button"
-              title={`Synced ${new Date(repo.fetchedAt).toLocaleTimeString()}`}
-              onClick={() => setRevision((r) => r + 1)}
+              title={`Synced ${new Date(repo.fetchedAt).toLocaleTimeString()} · Checks every 30s while active`}
+              disabled={loading}
+              onClick={refresh}
             >
               <CheckCircleIcon size={13} />
             </button>
@@ -491,7 +477,7 @@ export function App() {
               setView("github");
               setTab(t);
             }}
-            refresh={() => setRevision((r) => r + 1)}
+            refresh={refresh}
             chooseRepo={() => setModal({ type: "repository" })}
             notify={notify}
           />
