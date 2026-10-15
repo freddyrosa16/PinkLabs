@@ -20,7 +20,6 @@ import {
   TelescopeIcon,
   TrashIcon,
   XIcon,
-  CommentDiscussionIcon,
 } from "@primer/octicons-react";
 import { api, external } from "./api";
 import { AnimatedIcon } from "./AnimatedIcon";
@@ -485,25 +484,23 @@ export function App() {
                 )}
                 Sessions <small>{workspace.sessions.length || ""}</small>
               </button>
+              <button
+                className="icon-button"
+                aria-label="New session"
+                title="New session"
+                onClick={() => {
+                  setSessionsOpen(true);
+                  newChat();
+                }}
+              >
+                <PlusIcon size={14} />
+              </button>
             </div>
             {sessionsOpen && (
               <div className="session-list">
                 {[...workspace.sessions]
                   .sort((a, b) => b.updated - a.updated)
                   .map(sessionRow)}
-                {workspace.sessions.length === 0 && (
-                  <div className="sidebar-empty">
-                    <CommentDiscussionIcon />
-                    <p>
-                      Your conversations
-                      <br />
-                      will appear here.
-                    </p>
-                    <button onClick={newChat}>
-                      Start a chat <PlusIcon size={12} />
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </div>
