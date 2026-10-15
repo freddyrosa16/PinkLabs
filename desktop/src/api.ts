@@ -8,6 +8,11 @@ import type {
   PullRequestDetail,
   MergePullRequestInput,
   MergePullRequestResult,
+  PullRequestState,
+  PullRequestList,
+  PullRequestFiles,
+  DeletePullRequestBranchInput,
+  DeletePullRequestBranchResult,
 } from "./types";
 const pendingRepositories = new Map<string, Promise<Repository>>();
 async function get<T>(path: string, options?: RequestInit): Promise<T> {
@@ -18,6 +23,30 @@ async function get<T>(path: string, options?: RequestInit): Promise<T> {
   return data;
 }
 export const api = {
+  listPullRequests: (repo: string, state: PullRequestState = "all") =>
+    window.pink
+      ? window.pink.listPullRequests(repo, state)
+      : get<PullRequestList>(
+          `/api/pulls?${new URLSearchParams({ repo, state })}`,
+        ),
+  getPullRequestFiles: (repo: string, number: number, sha: string) =>
+    window.pink
+      ? window.pink.getPullRequestFiles(repo, number, sha)
+      : get<PullRequestFiles>(
+          `/api/pull-files?${new URLSearchParams({ repo, number: String(number), sha })}`,
+        ),
+  deletePullRequestBranch: (
+    repo: string,
+    number: number,
+    input: DeletePullRequestBranchInput,
+  ) =>
+    window.pink
+      ? window.pink.deletePullRequestBranch(repo, number, input)
+      : get<DeletePullRequestBranchResult>("/api/delete-pull-branch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo, number, ...input }),
+        }),
   repository: (repo: string) => {
     const existing = pendingRepositories.get(repo);
     if (existing) return existing;

@@ -5,6 +5,10 @@ import {
   validatePullRequestInput,
   validatePullRequestNumber,
   validateMergeInput,
+  validateBranchName,
+  validateCommitSHA,
+  validatePullRequestState,
+  validateDeleteBranchInput,
 } from "./validation.mjs";
 
 const run = promisify(execFile);
@@ -197,6 +201,7 @@ export function createGitHubService({
 } = {}) {
   const creatingPulls = new Map();
   const mergingPulls = new Map();
+  const deletingBranches = new Map();
 
   async function readPull(fullName, number) {
     const pull = await request(`repos/${fullName}/pulls/${number}`);
@@ -208,6 +213,353 @@ export function createGitHubService({
     )
       throw new Error("Incomplete pull request response");
     return pull;
+  }
+
+  async function listPullRequests(input, value = "all") {
+    const fullName = validateRepository(input);
+    const state = validatePullRequestState(value);
+    const path = `repos/${fullName}/pulls?state=${state}&sort=updated&direction=desc`;
+    try {
+      const rows = await request(`${path}&per_page=100&page=1`);
+      if (
+        !Array.isArray(rows) ||
+        rows.some(
+          (pull) =>
+            !["open", "closed"].includes(pull?.state) ||
+            !Number.isSafeInteger(pull?.number),
+        )
+      )
+        throw new Error("Incomplete pull request list");
+      let truncated = false;
+      if (rows.length === 100) {
+        // With per_page=1, page 101 is the first result beyond the returned hundred.
+        const extra = await request(`${path}&per_page=1&page=101`);
+        if (!Array.isArray(extra))
+          throw new Error("Incomplete pagination response");
+        truncated = extra.length > 0;
+      }
+      return {
+        pulls: rows.slice(0, 100).map((pull) => ({
+          ...pullRequest(pull),
+          state: pull.state,
+          merged:
+            pull.merged === true ||
+            (typeof pull.merged_at === "string" && pull.merged_at.length > 0),
+        })),
+        truncated: truncated || rows.length > 100,
+      };
+    } catch (error) {
+      throw publicError(error, "GitHub pull request history");
+    }
+  }
+
+  async function getPullRequestFiles(input, value, expectedSha) {
+    const fullName = validateRepository(input);
+    const number = validatePullRequestNumber(value);
+    const sha = validateCommitSHA(expectedSha);
+    try {
+      const before = await readPull(fullName, number);
+      if (before.head.sha.toLowerCase() !== sha)
+        throw Object.assign(
+          actionError(
+            "This pull request changed. Refresh its details before reading the files.",
+          ),
+          { userSafe: true },
+        );
+      const files = [];
+      let truncated = false,
+        patchBytes = 0;
+      for (let page = 1; page <= 10; page++) {
+        const batch = await request(
+          `repos/${fullName}/pulls/${number}/files?per_page=100&page=${page}`,
+        );
+        if (!Array.isArray(batch)) throw new Error("Incomplete files response");
+        for (const file of batch.slice(0, 100)) {
+          if (
+            typeof file?.filename !== "string" ||
+            typeof file.status !== "string" ||
+            [file.additions, file.deletions, file.changes].some(
+              (count) => !Number.isSafeInteger(count) || count < 0,
+            )
+          )
+            throw new Error("Incomplete file response");
+          let patch =
+            typeof file.patch === "string" && file.patch ? file.patch : null;
+          if (patch !== null) {
+            const bytes = Buffer.byteLength(patch, "utf8");
+            if (bytes > 256 * 1024 || patchBytes + bytes > 2 * 1024 * 1024) {
+              patch = null;
+              truncated = true;
+            } else {
+              patchBytes += bytes;
+              // GitHub may return only part of a large text patch. Keep that text,
+              // but flag the response if its changed lines do not match file totals.
+              const lines = patch.split("\n");
+              if (
+                lines.filter((line) => line.startsWith("+")).length !==
+                  file.additions ||
+                lines.filter((line) => line.startsWith("-")).length !==
+                  file.deletions
+              )
+                truncated = true;
+            }
+          }
+          files.push({
+            filename: file.filename,
+            previousFilename:
+              typeof file.previous_filename === "string"
+                ? file.previous_filename
+                : null,
+            status: file.status,
+            additions: file.additions,
+            deletions: file.deletions,
+            changes: file.changes,
+            patch,
+            url: file.blob_url || file.contents_url || "",
+          });
+        }
+        if (batch.length < 100) break;
+        if (
+          page === 10 &&
+          (!Number.isSafeInteger(before.changed_files) ||
+            before.changed_files > files.length)
+        )
+          truncated = true;
+      }
+      const after = await readPull(fullName, number);
+      if (
+        after.head.sha.toLowerCase() !== sha ||
+        after.base.ref !== before.base.ref ||
+        after.base.sha !== before.base.sha
+      )
+        throw Object.assign(
+          actionError(
+            "This pull request changed while its files were loading. Refresh and review the latest version.",
+          ),
+          { userSafe: true },
+        );
+      if (
+        Number.isSafeInteger(after.changed_files) &&
+        after.changed_files > files.length
+      )
+        truncated = true;
+      return { headSha: sha, files, truncated };
+    } catch (error) {
+      if (error.userSafe) throw error;
+      throw publicError(error, "GitHub pull request files");
+    }
+  }
+
+  function cleanupBasics(fullName, pull, metadata) {
+    const branch = typeof pull.head?.ref === "string" ? pull.head.ref : "";
+    const sha = isSHA(pull.head?.sha) ? pull.head.sha.toLowerCase() : "";
+    let reason = "";
+    if (pull.merged !== true || pull.state !== "closed")
+      reason = "Only a merged pull request's branch can be deleted.";
+    else if (
+      pull.head?.repo?.full_name?.toLowerCase() !== fullName.toLowerCase()
+    )
+      reason = "Branches from another repository cannot be deleted here.";
+    else if (!metadata?.default_branch)
+      reason =
+        "The repository's default branch could not be verified. Refresh before deleting.";
+    else if (branch === metadata.default_branch || branch === pull.base.ref)
+      reason = "The default or destination branch cannot be deleted.";
+    else if (metadata.permissions?.push !== true)
+      reason =
+        "Your GitHub account does not have permission to delete this branch.";
+    else if (metadata.archived || metadata.disabled)
+      reason = "This repository is archived or disabled.";
+    else {
+      try {
+        validateBranchName(branch);
+        validateCommitSHA(sha);
+      } catch {
+        reason =
+          "The branch or its commit could not be verified. Refresh before deleting.";
+      }
+    }
+    return { branch, sha, canDelete: false, deleted: false, reason };
+  }
+
+  async function readBranch(fullName, branch) {
+    const value = await request(
+      `repos/${fullName}/branches/${encodeURIComponent(branch)}`,
+    );
+    if (
+      value?.name !== branch ||
+      !isSHA(value.commit?.sha) ||
+      typeof value.protected !== "boolean"
+    )
+      throw new Error("Incomplete branch response");
+    return value;
+  }
+
+  async function branchUsedByOpenPull(fullName, branch) {
+    const owner = fullName.split("/")[0];
+    const results = await Promise.all([
+      request(
+        `repos/${fullName}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}&per_page=1`,
+      ),
+      request(
+        `repos/${fullName}/pulls?state=open&base=${encodeURIComponent(branch)}&per_page=1`,
+      ),
+    ]);
+    if (results.some((rows) => !Array.isArray(rows)))
+      throw new Error("Incomplete open pull response");
+    return results.some((rows) => rows.length > 0);
+  }
+
+  async function branchCleanup(fullName, pull, metadata) {
+    const result = cleanupBasics(fullName, pull, metadata);
+    if (result.reason) return result;
+    try {
+      let branch;
+      try {
+        branch = await readBranch(fullName, result.branch);
+      } catch (error) {
+        if (error.status === 404)
+          return {
+            ...result,
+            deleted: true,
+            reason: "This branch has already been deleted.",
+          };
+        throw error;
+      }
+      if (branch.protected)
+        return {
+          ...result,
+          reason: "This branch is protected and cannot be deleted here.",
+        };
+      if (branch.commit.sha.toLowerCase() !== result.sha)
+        return {
+          ...result,
+          reason:
+            "This branch has new or different commits. Its current work must be reviewed before deletion.",
+        };
+      if (await branchUsedByOpenPull(fullName, result.branch))
+        return {
+          ...result,
+          reason:
+            "This branch is used by an open pull request and cannot be deleted.",
+        };
+      return { ...result, canDelete: true };
+    } catch {
+      // Cleanup is optional: unavailable branch metadata must not break PR details or merging.
+      return {
+        ...result,
+        reason:
+          "Branch cleanup could not be verified. Refresh before deleting.",
+      };
+    }
+  }
+
+  function deletePullRequestBranch(input, value, fields) {
+    let fullName, number, payload;
+    try {
+      fullName = validateRepository(input);
+      number = validatePullRequestNumber(value);
+      payload = validateDeleteBranchInput(fields);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const key = `${fullName.toLowerCase()}#${payload.branch}`;
+    const signature = JSON.stringify([number, payload]);
+    const running = deletingBranches.get(key);
+    if (running)
+      return running.signature === signature
+        ? running.promise
+        : Promise.reject(
+            actionError(
+              "Branch deletion is already in progress. Wait, then refresh.",
+            ),
+          );
+    const promise = (async () => {
+      let pull, metadata;
+      try {
+        [pull, metadata] = await Promise.all([
+          readPull(fullName, number),
+          request(`repos/${fullName}`),
+        ]);
+      } catch (error) {
+        throw publicError(error, "GitHub branch cleanup");
+      }
+      const cleanup = await branchCleanup(fullName, pull, metadata);
+      if (cleanup.branch !== payload.branch || cleanup.sha !== payload.sha)
+        throw actionError(
+          "The pull request branch or commit changed. Refresh and review it before deleting.",
+        );
+      if (cleanup.deleted) return { deleted: true, branch: payload.branch };
+      if (!cleanup.canDelete) throw actionError(cleanup.reason, 405);
+      // Recheck all mutable conditions. DELETE refs has no atomic expected-SHA
+      // parameter, so a remote push in the final network gap cannot be ruled out.
+      let finalPull, finalMetadata, used;
+      try {
+        [finalPull, finalMetadata, used] = await Promise.all([
+          readPull(fullName, number),
+          request(`repos/${fullName}`),
+          branchUsedByOpenPull(fullName, payload.branch),
+        ]);
+      } catch (error) {
+        throw publicError(error, "GitHub branch deletion preflight");
+      }
+      const final = cleanupBasics(fullName, finalPull, finalMetadata);
+      if (
+        final.reason ||
+        final.branch !== payload.branch ||
+        final.sha !== payload.sha ||
+        used
+      )
+        throw actionError(
+          final.reason ||
+            "This branch changed or is used by an open pull request. Refresh before deleting.",
+        );
+      let branch;
+      try {
+        branch = await readBranch(fullName, payload.branch);
+      } catch (error) {
+        throw publicError(error, "GitHub branch deletion preflight");
+      }
+      if (branch.protected || branch.commit.sha.toLowerCase() !== payload.sha)
+        throw actionError(
+          "This branch is now protected or has different commits. Refresh before deleting.",
+        );
+      try {
+        const result = await request(
+          `repos/${fullName}/git/refs/heads/${encodeURIComponent(payload.branch)}`,
+          { method: "DELETE" },
+        );
+        if (result !== null) throw new Error("Unexpected deletion response");
+        return { deleted: true, branch: payload.branch };
+      } catch (error) {
+        if (!error.status || error.status >= 500 || error.status === 404) {
+          try {
+            // Verify repository access before interpreting a missing branch as success.
+            await request(`repos/${fullName}`);
+            try {
+              await readBranch(fullName, payload.branch);
+            } catch (missing) {
+              if (missing.status === 404)
+                return { deleted: true, branch: payload.branch };
+            }
+          } catch {
+            /* Keep the outcome unconfirmed; never automatically repeat DELETE. */
+          }
+        }
+        if ([405, 409, 422].includes(error.status))
+          throw actionError(
+            "GitHub blocked branch deletion. Refresh to check branch protection, repository rules, and newer commits.",
+            error.status,
+          );
+        if ([401, 403, 429].includes(error.status))
+          throw publicError(error, "Branch deletion");
+        throw new Error(
+          "GitHub did not confirm branch deletion. Refresh before retrying; the branch may already be deleted.",
+        );
+      }
+    })().finally(() => deletingBranches.delete(key));
+    deletingBranches.set(key, { signature, promise });
+    return promise;
   }
 
   async function pullChecks(fullName, sha) {
@@ -280,7 +632,10 @@ export function createGitHubService({
       throw publicError(error, "GitHub pull request details");
     }
     const headSha = pull.head.sha.toLowerCase();
-    const { checks, checksIncomplete } = await pullChecks(fullName, headSha);
+    const [{ checks, checksIncomplete }, cleanup] = await Promise.all([
+      pullChecks(fullName, headSha),
+      branchCleanup(fullName, pull, metadata),
+    ]);
     const mergeable =
       typeof pull.mergeable === "boolean" ? pull.mergeable : null;
     const mergeState =
@@ -346,6 +701,7 @@ export function createGitHubService({
       deletions: pull.deletions ?? 0,
       changedFiles: pull.changed_files ?? 0,
       commits: pull.commits ?? 0,
+      branchCleanup: cleanup,
     };
   }
 
@@ -866,6 +1222,9 @@ export function createGitHubService({
     createPullRequest,
     getPullRequest,
     mergePullRequest,
+    listPullRequests,
+    getPullRequestFiles,
+    deletePullRequestBranch,
   };
 }
 
@@ -877,3 +1236,6 @@ export const compareBranches = service.compareBranches;
 export const createPullRequest = service.createPullRequest;
 export const getPullRequest = service.getPullRequest;
 export const mergePullRequest = service.mergePullRequest;
+export const listPullRequests = service.listPullRequests;
+export const getPullRequestFiles = service.getPullRequestFiles;
+export const deletePullRequestBranch = service.deletePullRequestBranch;

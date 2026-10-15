@@ -28,6 +28,7 @@ import rehypeSanitize from "rehype-sanitize";
 import type { Repository, Status } from "./types";
 import { ago, external } from "./api";
 import { LanguageIcon } from "./LanguageIcon";
+import { PullRequestWorkspace } from "./PullRequestWorkspace";
 export function StatusIcon({ status }: { status: Status }) {
   return (
     <span
@@ -91,6 +92,9 @@ export function GitHubView({
   chooseRepo,
   createPull,
   openPull,
+  selectedPull,
+  selectPull,
+  pullChanged,
   notify,
 }: {
   repo: Repository | null;
@@ -102,6 +106,9 @@ export function GitHubView({
   chooseRepo: () => void;
   createPull: () => void;
   openPull: (number: number) => void;
+  selectedPull: number | null;
+  selectPull: (number: number | null) => void;
+  pullChanged: (message: string) => void;
   notify: (message: string) => void;
 }) {
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -572,17 +579,15 @@ export function GitHubView({
                 </aside>
               </div>
             ) : tab === "pulls" ? (
-              <section>
-                <div className="section-heading">
-                  <h2>
-                    Open pull requests <span>{repo.openPrCount}</span>
-                  </h2>
-                  <button onClick={createPull}>
-                    <GitPullRequestIcon size={13} /> New pull request
-                  </button>
-                </div>
-                <PullRows repo={repo} openPull={openPull} all />
-              </section>
+              <PullRequestWorkspace
+                key={repo.fullName}
+                repo={repo}
+                selectedNumber={selectedPull}
+                selectPull={selectPull}
+                createPull={createPull}
+                changed={pullChanged}
+                refreshRepository={refresh}
+              />
             ) : tab === "releases" ? (
               <section className="release-list">
                 {repo.releases.length ? (
