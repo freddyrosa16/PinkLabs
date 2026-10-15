@@ -324,7 +324,7 @@ export function PullRequestDetails({
         <>
           <div className="pr-detail-title">
             {done ? (
-              <GitMergeIcon size={20} className="green" />
+              <GitMergeIcon size={20} className="pr-merged-icon" />
             ) : (
               <GitPullRequestIcon
                 size={20}
@@ -334,7 +334,7 @@ export function PullRequestDetails({
             <h3>{detail.title}</h3>
           </div>
           <div className="pr-detail-meta">
-            <span className="badge">
+            <span className={`badge${done ? " merged" : ""}`}>
               {done
                 ? "Merged"
                 : detail.state === "closed"

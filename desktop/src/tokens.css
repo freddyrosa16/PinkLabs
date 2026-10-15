@@ -21,6 +21,7 @@
   /* One semantic palette for status, actions, change counts, and diffs. */
   --positive: #3fb950;
   --negative: #ff6b63;
+  --merged: #b2a3df;
   --positive-bg: #142b1c;
   --negative-bg: #382020;
   --positive-border: #2b6037;
