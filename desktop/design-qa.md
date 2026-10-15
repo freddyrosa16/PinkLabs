@@ -84,3 +84,44 @@ Keyboard focus traversal and numerical contrast remain outside this independent 
 No additional P3 refinement is required for this visual target. The exact historical font rasterization and GitHub data snapshot cannot be reproduced from a screenshot and are not acceptance blockers.
 
 final result: passed
+
+---
+
+# New Chat design QA
+
+Source visual truth: `/var/folders/zj/jz 7f 4hk 9543_s 2lpwft 8vmvh 0000gn/T/codex-clipboard-ba 5f 3ccb-ccfe-47a 6-9451-1bc 300c 7ebd 9.png`.
+Implementation: `/Users/freddster 16/.codex/visualizations/2026/10/15/01a 14034-48d 8-79b 1-9e 00-4f 73730e 3737/chat-composer-desktop.png`.
+Native proof: `/Users/freddster 16/.codex/visualizations/2026/10/15/01a 14034-48d 8-79b 1-9e 00-4f 73730e 3737/chat-composer-native.png`.
+Short-window proof: `/Users/freddster 16/.codex/visualizations/2026/10/15/01a 14034-48d 8-79b 1-9e 00-4f 73730e 3737/chat-composer-short.png`.
+
+## Target and comparison
+
+Refine the existing Pink Labs New Chat using Codex's composition and the user's Cursor/Claude references as inspiration, retaining Pink Labs identity and actual practice capabilities. This is not a pixel-exact clone. The existing sidebar, Projects/Sessions controls, and GitHub surfaces stay consistent.
+
+Full-view comparison opened source and implementation together in one image-tool input. Source is 2896×1608 pixels at inferred 2× density (1448×804 CSS equivalent). Browser implementation is 1448×804 at 1×; compare proportions at that equivalent CSS size. Both show a dark, empty new chat with Pink Labs selected. Native proof is 2880×1726 (1440×863 at 2×), with Claude selected instead of the browser test's OpenAI. These provider/window differences are intentional.
+
+Composer text, controls, borders, and typography are legible in the full-view native capture; a separate crop is unnecessary. The provider popup was also visually inspected at 375×640. Narrow/short-window layout and long drafts were checked at 375×480.
+
+## Findings and fixes
+
+- [Resolved P 2] Short-window welcome clipping. At 375×480 with a 20-line draft, the old 120px minimum welcome height pushed the heading below the 58px chat viewport. Removed its minimum height and hid the decorative mark at short heights. Post-fix DOM bounds confirm heading y 64–90 within chat area y 48–106; Send remains inside the viewport and the document width remains 375px. The short-window screenshot records this state.
+- [Resolved P 2] Repeated provider descriptions made the popup needlessly tall and repetitive on mobile. Removed duplicate descriptions; the persistent practice disclosure remains below the composer.
+- No remaining actionable P 0/P 1/P 2 findings.
+
+## Required visual surfaces
+
+- Typography: native system sans retained, restrained 30px maximum welcome heading, readable 15px input, 13px picker, muted compact supporting text. Long project names wrap in the heading and truncate in the trigger.
+- Spacing/layout: centered welcome, compact starter chips near a bottom composer, inset context strip and rounded input. The composer grows to a bounded height and the input scrolls. Wider editor and starter chips differ intentionally from Codex to fit the current beginner practice workflow.
+- Colors/tokens: existing charcoal canvas, neutral raised surfaces and semantic palette retained. Bright input text with restrained secondary controls; selected menu options use neutral highlights.
+- Assets: existing Pink Labs mark and provider SVG assets retained. Octicons supply functional project/device/prompt/send icons. No fabricated voice/access/attachment controls.
+- Copy: project-aware heading, concise starter labels, and explicit local practice/no-model disclosure. No claim of live model execution.
+
+## Interaction evidence
+
+Verified project mouse selection, provider keyboard selection, native Electron project End/Enter, Escape focus return, Tab dismissal into the textarea, starter fill/focus, Shift+Enter newline, Enter send, Stop cancellation, completed practice reply, session reopening after reload, disabled choices for existing sessions, and bounded 20-line input at 375×480. Independent code review found no behavioral/accessibility blocker. TypeScript, 151 existing tests, production build and macOS packaging passed. Console review found only temporary Vite missing-module reload errors during parallel file creation; no new warnings/errors appeared after the final clean reload.
+
+## Final result
+
+final result: passed
+
+Residual limits: the Python agent is not connected, so all conversation replies remain local practice. VoiceOver and real mobile software-keyboard behavior were not tested. Existing Vite bundle-size warning remains.
