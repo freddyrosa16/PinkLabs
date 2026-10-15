@@ -29,7 +29,6 @@ function fixture(overrides = {}) {
     viewport: { left: 0, top: 0, width: 1280, height: 900 },
     layoutHeight: 900,
     menuHeight: 140,
-    align: "left",
     ...overrides,
   };
 }
@@ -78,6 +77,7 @@ test("a centered composer opens a fitting menu below the entire message box", ()
   const input = fixture();
   const result = assertClearAndVisible(input);
   assert.ok(result.top > input.composer.bottom);
+  assert.equal(result.position.left, input.composer.left);
   assert.equal(
     result.height,
     input.menuHeight,
@@ -92,10 +92,10 @@ test("a bottom-docked composer opens above the entire message box", () => {
     viewport: { left: 0, top: 0, width: 1280, height: 620 },
     layoutHeight: 620,
     menuHeight: 150,
-    align: "right",
   });
   const result = assertClearAndVisible(input);
   assert.ok(result.bottom < input.composer.top);
+  assert.equal(result.position.left, input.composer.left);
   assert.equal(result.height, input.menuHeight);
 });
 
@@ -128,15 +128,14 @@ test("an oversized project menu scrolls on the larger side when neither side fit
   }
 });
 
-test("a narrow viewport clamps either alignment without obscuring the composer", () => {
-  for (const align of ["left", "right"]) {
+test("a narrow viewport keeps either picker inside the screen without obscuring the composer", () => {
+  for (const triggerLeft of [20, 178]) {
     const input = fixture({
-      trigger: rect(178, 240, 34, 34),
+      trigger: rect(triggerLeft, 240, 34, 34),
       composer: rect(8, 150, 204, 136),
       viewport: { left: 0, top: 0, width: 220, height: 640 },
       layoutHeight: 640,
       menuHeight: 200,
-      align,
     });
     const result = assertClearAndVisible(input);
     assert.ok(
@@ -157,7 +156,6 @@ test("an offset visual viewport constrains an above menu in layout coordinates",
     viewport: { left: 110, top: 140, width: 400, height: 440 },
     layoutHeight: 900,
     menuHeight: 170,
-    align: "right",
   });
   const result = assertClearAndVisible(input);
   assert.ok(result.bottom < input.composer.top);

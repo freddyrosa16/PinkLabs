@@ -119,7 +119,6 @@ export function ChatComposer({
             label="Model provider"
             value={provider}
             disabled={locked}
-            align="right"
             onChange={(value) => setProvider(value as Provider)}
             options={providers.map((p) => ({
               value: p.id,

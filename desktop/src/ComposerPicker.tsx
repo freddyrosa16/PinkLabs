@@ -17,7 +17,6 @@ interface ComposerPickerProps {
   }[];
   onChange: (value: string) => void;
   disabled?: boolean;
-  align?: "left" | "right";
   composerRef: RefObject<HTMLFormElement | null>;
 }
 
@@ -27,7 +26,6 @@ export function ComposerPicker({
   options,
   onChange,
   disabled = false,
-  align = "left",
   composerRef,
 }: ComposerPickerProps) {
   const id = useId();
@@ -128,7 +126,6 @@ export function ComposerPicker({
         },
         layoutHeight: window.innerHeight,
         menuHeight: list.scrollHeight + 2,
-        align,
       });
       setPosition((previous) =>
         previous?.left === next.left &&
@@ -158,7 +155,7 @@ export function ComposerPicker({
       window.visualViewport?.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("scroll", measure);
     };
-  }, [expanded, align, composerRef, options]);
+  }, [expanded, composerRef, options]);
 
   useLayoutEffect(() => {
     if (!expanded || !position) return;

@@ -21,14 +21,12 @@ export function positionComposerMenu({
   viewport,
   layoutHeight,
   menuHeight,
-  align,
 }: {
   trigger: Rect;
   composer: Rect;
   viewport: { top: number; left: number; width: number; height: number };
   layoutHeight: number;
   menuHeight: number;
-  align: "left" | "right";
 }): ComposerMenuPosition {
   const inset = 12;
   const gap = 8;
@@ -39,7 +37,7 @@ export function positionComposerMenu({
   const left = Math.max(
     viewport.left + inset,
     Math.min(
-      align === "right" ? trigger.right - width : trigger.left,
+      composer.left,
       viewport.left + viewport.width - inset - width,
     ),
   );
