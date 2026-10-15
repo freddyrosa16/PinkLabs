@@ -13,6 +13,17 @@ import { api, external } from "./api";
 import { StatusIcon } from "./GitHubView";
 import type { MergeMethod, PullRequestDetail } from "./types";
 
+function pullRequestError(cause: unknown) {
+  const message =
+    cause instanceof Error
+      ? cause.message
+      : "The pull request could not be updated. Refresh its status and try again.";
+  return message.replace(
+    /^Error invoking remote method '[^']+': (?:Error: )?/,
+    "",
+  );
+}
+
 const methods: Record<MergeMethod, { label: string; description: string }> = {
   merge: {
     label: "Merge commit",
@@ -70,7 +81,7 @@ export function PullRequestDetails({
         );
       })
       .catch((cause: Error) => {
-        if (current) setError(cause.message);
+        if (current) setError(pullRequestError(cause));
       })
       .finally(() => {
         if (current) setLoading(false);
@@ -105,11 +116,7 @@ export function PullRequestDetails({
       setMergedSha(result.sha);
       merged();
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "The pull request could not be merged. Refresh its status and try again.",
-      );
+      setError(pullRequestError(cause));
       setConfirming(false);
     } finally {
       submitting.current = false;
@@ -298,7 +305,11 @@ export function PullRequestDetails({
                 )}
               </div>
               <div className="pr-merge-section">
-                {detail.mergeBlockReason ? (
+                {error ? (
+                  <p className="pr-check-warning">
+                    Refresh status above to review the latest PR before merging.
+                  </p>
+                ) : detail.mergeBlockReason ? (
                   <p className="pr-check-warning">{detail.mergeBlockReason}</p>
                 ) : (
                   <p className="pr-merge-ready">
