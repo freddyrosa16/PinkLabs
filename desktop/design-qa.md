@@ -89,10 +89,10 @@ final result: passed
 
 # New Chat design QA
 
-Source visual truth: `/var/folders/zj/jz 7f 4hk 9543_s 2lpwft 8vmvh 0000gn/T/codex-clipboard-ba 5f 3ccb-ccfe-47a 6-9451-1bc 300c 7ebd 9.png`.
-Implementation: `/Users/freddster 16/.codex/visualizations/2026/10/15/01a 14034-48d 8-79b 1-9e 00-4f 73730e 3737/chat-composer-desktop.png`.
-Native proof: `/Users/freddster 16/.codex/visualizations/2026/10/15/01a 14034-48d 8-79b 1-9e 00-4f 73730e 3737/chat-composer-native.png`.
-Short-window proof: `/Users/freddster 16/.codex/visualizations/2026/10/15/01a 14034-48d 8-79b 1-9e 00-4f 73730e 3737/chat-composer-short.png`.
+Source visual truth: `/var/folders/zj/jz7f4hk9543_s2lpwft8vmvh0000gn/T/codex-clipboard-ba5f3ccb-ccfe-47a6-9451-1bc300c7ebd9.png`.
+Implementation: `/Users/freddster16/.codex/visualizations/2026/10/15/01a14034-48d8-79b1-9e00-4f73730e3737/chat-composer-desktop.png`.
+Native proof: `/Users/freddster16/.codex/visualizations/2026/10/15/01a14034-48d8-79b1-9e00-4f73730e3737/chat-composer-native.png`.
+Short-window proof: `/Users/freddster16/.codex/visualizations/2026/10/15/01a14034-48d8-79b1-9e00-4f73730e3737/chat-composer-short.png`.
 
 ## Target and comparison
 
@@ -104,9 +104,9 @@ Composer text, controls, borders, and typography are legible in the full-view na
 
 ## Findings and fixes
 
-- [Resolved P 2] Short-window welcome clipping. At 375×480 with a 20-line draft, the old 120px minimum welcome height pushed the heading below the 58px chat viewport. Removed its minimum height and hid the decorative mark at short heights. Post-fix DOM bounds confirm heading y 64–90 within chat area y 48–106; Send remains inside the viewport and the document width remains 375px. The short-window screenshot records this state.
-- [Resolved P 2] Repeated provider descriptions made the popup needlessly tall and repetitive on mobile. Removed duplicate descriptions; the persistent practice disclosure remains below the composer.
-- No remaining actionable P 0/P 1/P 2 findings.
+- [Resolved P2] Short-window welcome clipping. At 375×480 with a 20-line draft, the old 120px minimum welcome height pushed the heading below the 58px chat viewport. Removed its minimum height and hid the decorative mark at short heights. Post-fix DOM bounds confirm heading y 64–90 within chat area y 48–106; Send remains inside the viewport and the document width remains 375px. The short-window screenshot records this state.
+- [Resolved P2] Repeated provider descriptions made the popup needlessly tall and repetitive on mobile. Removed duplicate descriptions; the persistent practice disclosure remains below the composer.
+- No remaining actionable P0/P1/P2 findings.
 
 ## Required visual surfaces
 
