@@ -76,119 +76,123 @@ export function PullRequestWorkspace({
   );
   return (
     <section className="pr-workspace" aria-label="Pull request workspace">
-      <div className="section-heading pr-workspace-heading">
-        <div>
-          <h2>
-            Pull requests <span>{openCount} open</span>
-          </h2>
-          <p>Review the changes, merge, and clean up branches here.</p>
-        </div>
-        <button className="button" disabled={busy} onClick={createPull}>
-          <PlusIcon size={13} /> New pull request
-        </button>
-      </div>
-      <div className="pr-list-toolbar">
-        <div className="pr-filter-tabs" aria-label="Filter pull requests">
-          {(
-            [
-              ["all", "All"],
-              ["open", "Open"],
-              ["closed", "Closed / merged"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              className={filter === value ? "active" : ""}
-              aria-pressed={filter === value}
-              disabled={busy}
-              onClick={() => chooseFilter(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <button
-          className="text-button"
-          disabled={loading || busy}
-          onClick={() => {
-            setRevision((n) => n + 1);
-            refreshRepository();
-          }}
-          aria-label="Refresh pull request list"
-        >
-          <SyncIcon size={12} /> Refresh list
-        </button>
-      </div>
-      {error && (
-        <div className="pr-message" role="alert">
-          {error}{" "}
-          <button
-            className="inline-link"
-            onClick={() => setRevision((n) => n + 1)}
-            disabled={loading || busy}
-          >
-            Retry
+      <div className="pr-list-panel">
+        <div className="section-heading pr-workspace-heading">
+          <div>
+            <h2>
+              Pull requests <span>{openCount} open</span>
+            </h2>
+            <p>Review the changes, merge, and clean up branches here.</p>
+          </div>
+          <button className="button" disabled={busy} onClick={createPull}>
+            <PlusIcon size={13} /> New pull request
           </button>
         </div>
-      )}
-      <div className="pr-workspace-list" aria-label="Pull requests">
-        {!list ? (
-          <div className="empty-row">
-            {loading
-              ? "Loading pull requests…"
-              : "Pull requests could not be loaded."}
+        <div className="pr-list-toolbar">
+          <div className="pr-filter-tabs" aria-label="Filter pull requests">
+            {(
+              [
+                ["all", "All"],
+                ["open", "Open"],
+                ["closed", "Closed / merged"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                className={filter === value ? "active" : ""}
+                aria-pressed={filter === value}
+                disabled={busy}
+                onClick={() => chooseFilter(value)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-        ) : list.pulls.length ? (
-          list.pulls.map((pull) => (
+          <button
+            className="text-button"
+            disabled={loading || busy}
+            onClick={() => {
+              setRevision((n) => n + 1);
+              refreshRepository();
+            }}
+            aria-label="Refresh pull request list"
+          >
+            <SyncIcon size={12} /> Refresh list
+          </button>
+        </div>
+        {error && (
+          <div className="pr-message" role="alert">
+            {error}{" "}
             <button
-              key={pull.number}
-              className={`pull-row ${selectedNumber === pull.number ? "is-selected" : ""}`}
-              aria-pressed={selectedNumber === pull.number}
-              disabled={busy}
-              onClick={() => selectPull(pull.number)}
+              className="inline-link"
+              onClick={() => setRevision((n) => n + 1)}
+              disabled={loading || busy}
             >
-              {pull.merged ? (
-                <GitMergeIcon className="pr-merged-icon" />
-              ) : pull.state === "closed" ? (
-                <GitPullRequestClosedIcon className="red" />
-              ) : (
-                <GitPullRequestIcon
-                  className={pull.draft ? "muted" : "green"}
-                />
-              )}
-              <div className="row-main">
-                <strong>{pull.title}</strong>
-                <small>
-                  #{pull.number} · {pull.author.login} · opened {ago(pull.date)}{" "}
-                  ago
-                </small>
-              </div>
-              <span className={`pr-state-label ${pull.merged ? "merged" : ""}`}>
-                {pull.merged
-                  ? "Merged"
-                  : pull.state === "closed"
-                    ? "Closed"
-                    : pull.draft
-                      ? "Draft"
-                      : "Open"}
-              </span>
+              Retry
             </button>
-          ))
-        ) : (
-          <div className="empty-row">
-            {filter === "open"
-              ? "No open pull requests. Choose All or Closed / merged to revisit earlier work."
-              : filter === "closed"
-                ? "No closed or merged pull requests yet."
-                : "No pull requests yet. Create one to start a review."}
           </div>
         )}
+        <div className="pr-workspace-list" aria-label="Pull requests">
+          {!list ? (
+            <div className="empty-row">
+              {loading
+                ? "Loading pull requests…"
+                : "Pull requests could not be loaded."}
+            </div>
+          ) : list.pulls.length ? (
+            list.pulls.map((pull) => (
+              <button
+                key={pull.number}
+                className={`pull-row ${selectedNumber === pull.number ? "is-selected" : ""}`}
+                aria-pressed={selectedNumber === pull.number}
+                disabled={busy}
+                onClick={() => selectPull(pull.number)}
+              >
+                {pull.merged ? (
+                  <GitMergeIcon className="pr-merged-icon" />
+                ) : pull.state === "closed" ? (
+                  <GitPullRequestClosedIcon className="red" />
+                ) : (
+                  <GitPullRequestIcon
+                    className={pull.draft ? "muted" : "green"}
+                  />
+                )}
+                <div className="row-main">
+                  <strong>{pull.title}</strong>
+                  <small>
+                    #{pull.number} · {pull.author.login} · opened{" "}
+                    {ago(pull.date)} ago
+                  </small>
+                </div>
+                <span
+                  className={`pr-state-label ${pull.merged ? "merged" : ""}`}
+                >
+                  {pull.merged
+                    ? "Merged"
+                    : pull.state === "closed"
+                      ? "Closed"
+                      : pull.draft
+                        ? "Draft"
+                        : "Open"}
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="empty-row">
+              {filter === "open"
+                ? "No open pull requests. Choose All or Closed / merged to revisit earlier work."
+                : filter === "closed"
+                  ? "No closed or merged pull requests yet."
+                  : "No pull requests yet. Create one to start a review."}
+            </div>
+          )}
+        </div>
+        {list?.truncated && (
+          <p className="pr-list-limit">
+            Showing the 100 most recently updated pull requests in this view.
+          </p>
+        )}
       </div>
-      {list?.truncated && (
-        <p className="pr-list-limit">
-          Showing the 100 most recently updated pull requests in this view.
-        </p>
-      )}
       {selectedNumber !== null ? (
         <PullRequestDetails
           key={`${repo.fullName}/${selectedNumber}`}
