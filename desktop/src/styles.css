@@ -373,11 +373,9 @@ code {
   grid-column: 2;
   grid-row: 1;
   background: var(--canvas);
-  border: 1px solid var(--line);
-  border-right: 0;
-  border-bottom: 0;
-  border-radius: 8px 0 0 0;
-  margin-top: 5px;
+  border: 0;
+  border-radius: 0;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -2941,7 +2939,6 @@ h2 { font-size: 14px; }
 
 
 /* Give each working area its own rounded surface and room to breathe. */
-.main-content { border-radius: var(--radius-overlay) 0 0 0; }
 .repo-scroll { padding: 24px; }
 .repo-hero { padding: 4px 4px 28px; min-height: 126px; }
 .stats-strip {
