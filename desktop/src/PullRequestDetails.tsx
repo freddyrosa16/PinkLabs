@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowUpRightIcon,
   CheckCircleIcon,
@@ -15,6 +15,8 @@ import remarkGfm from "remark-gfm";
 import { api, external } from "./api";
 import { PullRequestDiff } from "./PullRequestDiff";
 import { PullRequestComments } from "./PullRequestComments";
+import { captureScrollAnchor } from "./scroll-anchor";
+import type { ScrollAnchor } from "./scroll-anchor";
 import type { MergeMethod, PullRequestDetail, Status } from "./types";
 
 function pullRequestError(cause: unknown) {
@@ -90,6 +92,17 @@ export function PullRequestDetails({
   const completedWrite = useRef(false);
   const busyCallback = useRef(busyChanged);
   const previousRefresh = useRef(refreshVersion);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const pendingAnchor = useRef<ScrollAnchor | null>(null);
+  function preserveActionPosition() {
+    pendingAnchor.current?.cancel();
+    pendingAnchor.current = captureScrollAnchor(actionsRef.current);
+  }
+  useLayoutEffect(() => {
+    pendingAnchor.current?.restore();
+    pendingAnchor.current = null;
+  });
+  useEffect(() => () => pendingAnchor.current?.cancel(), []);
   busyCallback.current = busyChanged;
   useEffect(() => () => busyCallback.current?.(false), []);
   useEffect(() => {
@@ -105,10 +118,12 @@ export function PullRequestDetails({
     )
       return;
     previousRefresh.current = refreshVersion;
+    preserveActionPosition();
     setRetry((value) => value + 1);
   }, [refreshVersion, saving, commentSaving, confirming, confirmingDelete]);
   useEffect(() => {
     let current = true;
+    preserveActionPosition();
     setLoading(true);
     setError("");
     setConfirming(false);
@@ -117,6 +132,7 @@ export function PullRequestDetails({
       .getPullRequest(fullName, number)
       .then((pull) => {
         if (!current) return;
+        preserveActionPosition();
         setDetail(pull);
         setReviewRevision((value) => value + 1);
         setMethod((previous) =>
@@ -126,12 +142,14 @@ export function PullRequestDetails({
         );
       })
       .catch((cause: unknown) => {
-        if (current)
+        if (current) {
+          preserveActionPosition();
           setError(
             completedWrite.current
               ? `The completed action is confirmed, but the latest details could not be loaded. ${pullRequestError(cause)}`
               : pullRequestError(cause),
           );
+        }
       })
       .finally(() => {
         if (current) setLoading(false);
@@ -143,6 +161,7 @@ export function PullRequestDetails({
 
   function refresh() {
     if (submitting.current || commentSaving) return;
+    preserveActionPosition();
     setLoading(true);
     setConfirming(false);
     setConfirmingDelete(false);
@@ -163,6 +182,7 @@ export function PullRequestDetails({
     )
       return;
     submitting.current = true;
+    preserveActionPosition();
     setSaving("merge");
     let result;
     try {
@@ -176,6 +196,7 @@ export function PullRequestDetails({
           "GitHub did not confirm this merge. Refresh the pull request before trying again.",
         );
     } catch (cause) {
+      preserveActionPosition();
       setError(pullRequestError(cause));
       setConfirming(false);
       return;
@@ -184,6 +205,7 @@ export function PullRequestDetails({
       setSaving(null);
     }
     completedWrite.current = true;
+    preserveActionPosition();
     setMergedSha(result.sha);
     setNotice(`Pull request #${number} merged into ${detail.base}.`);
     setDetail((previous) =>
@@ -210,6 +232,7 @@ export function PullRequestDetails({
     )
       return;
     submitting.current = true;
+    preserveActionPosition();
     setSaving("delete");
     try {
       const result = await api.deletePullRequestBranch(fullName, number, {
@@ -221,6 +244,7 @@ export function PullRequestDetails({
           "GitHub did not confirm branch deletion. Refresh the pull request before trying again.",
         );
     } catch (cause) {
+      preserveActionPosition();
       setError(pullRequestError(cause));
       setConfirmingDelete(false);
       return;
@@ -229,6 +253,7 @@ export function PullRequestDetails({
       setSaving(null);
     }
     completedWrite.current = true;
+    preserveActionPosition();
     setDeletedBranch(cleanup.branch);
     setNotice(`Deleted branch ${cleanup.branch} on GitHub.`);
     setDetail((previous) =>
@@ -465,89 +490,109 @@ export function PullRequestDetails({
             </div>
           )}
           {isOpen && (
-            <div className="pr-merge-section">
-              {confirming ? (
-                <div
-                  className="pr-merge-confirm"
-                  role="region"
-                  aria-label="Confirm pull request merge"
-                >
-                  <h3>
-                    Merge #{number} into {detail.base}?
-                  </h3>
-                  <p>
-                    This will add the changes from <b>{detail.branch}</b> to{" "}
-                    <b>{detail.base}</b> on GitHub using{" "}
-                    <b>{methods[method].label.toLowerCase()}</b>.
+            <div className="pr-merge-section pr-action-panels">
+              <div
+                className="pr-merge-confirm pr-action-panel"
+                role="region"
+                aria-label="Confirm pull request merge"
+                aria-hidden={!confirming}
+                inert={!confirming}
+              >
+                <h3>
+                  Merge #{number} into {detail.base}?
+                </h3>
+                <p>
+                  This will add the changes from <b>{detail.branch}</b> to{" "}
+                  <b>{detail.base}</b> on GitHub using{" "}
+                  <b>{methods[method].label.toLowerCase()}</b>.
+                </p>
+                <p className="muted">
+                  Reviewed commit: <code>{detail.headSha.slice(0, 7)}</code>. If
+                  new commits arrive, you’ll need to refresh and confirm again.
+                </p>
+              </div>
+              <div
+                className="pr-action-panel"
+                aria-hidden={confirming}
+                inert={confirming}
+              >
+                {error ? (
+                  <p className="pr-check-warning">
+                    Refresh details to review the latest PR before merging.
                   </p>
-                  <p className="muted">
-                    Reviewed commit: <code>{detail.headSha.slice(0, 7)}</code>.
-                    If new commits arrive, you’ll need to refresh and confirm
-                    again.
+                ) : detail.mergeBlockReason ? (
+                  <p className="pr-check-warning">{detail.mergeBlockReason}</p>
+                ) : detail.canMerge ? (
+                  <p className="pr-merge-ready">
+                    <CheckCircleIcon size={14} /> Ready to merge. GitHub will
+                    recheck its rules when you confirm.
                   </p>
-                </div>
-              ) : (
-                <>
-                  {error ? (
-                    <p className="pr-check-warning">
-                      Refresh details to review the latest PR before merging.
+                ) : null}
+                {detail.mergeMethods.length > 0 && (
+                  <>
+                    <label
+                      className="field-label"
+                      htmlFor={`pr-merge-method-${number}`}
+                    >
+                      Merge method
+                    </label>
+                    <select
+                      id={`pr-merge-method-${number}`}
+                      value={method}
+                      disabled={blocked || !detail.canMerge}
+                      onChange={(event) => {
+                        preserveActionPosition();
+                        setMethod(event.target.value as MergeMethod);
+                      }}
+                    >
+                      {detail.mergeMethods.map((value) => (
+                        <option value={value} key={value}>
+                          {methods[value].label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="pr-method-help">
+                      {methods[method].description}
                     </p>
-                  ) : detail.mergeBlockReason ? (
-                    <p className="pr-check-warning">
-                      {detail.mergeBlockReason}
-                    </p>
-                  ) : detail.canMerge ? (
-                    <p className="pr-merge-ready">
-                      <CheckCircleIcon size={14} /> Ready to merge. GitHub will
-                      recheck its rules when you confirm.
-                    </p>
-                  ) : null}
-                  {detail.mergeMethods.length > 0 && (
-                    <>
-                      <label
-                        className="field-label"
-                        htmlFor={`pr-merge-method-${number}`}
-                      >
-                        Merge method
-                      </label>
-                      <select
-                        id={`pr-merge-method-${number}`}
-                        value={method}
-                        disabled={blocked || !detail.canMerge}
-                        onChange={(event) =>
-                          setMethod(event.target.value as MergeMethod)
-                        }
-                      >
-                        {detail.mergeMethods.map((value) => (
-                          <option value={value} key={value}>
-                            {methods[value].label}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="pr-method-help">
-                        {methods[method].description}
-                      </p>
-                    </>
-                  )}
-                </>
-              )}
+                  </>
+                )}
+              </div>
             </div>
           )}
           {done && (
-            <div className="pr-branch-cleanup">
-              {branchDeleted ? (
-                <p className="pr-merge-ready">
-                  <CheckCircleIcon size={14} /> Branch{" "}
-                  <code>
-                    {deletedBranch || cleanup?.branch || detail.branch}
-                  </code>{" "}
-                  has been deleted on GitHub.
-                </p>
-              ) : confirmingDelete && cleanup ? (
+            <div className="pr-branch-cleanup pr-action-panels">
+              <div
+                className="pr-action-panel"
+                aria-hidden={confirmingDelete && !branchDeleted}
+                inert={confirmingDelete && !branchDeleted}
+              >
+                {branchDeleted ? (
+                  <p className="pr-merge-ready">
+                    <CheckCircleIcon size={14} /> Branch{" "}
+                    <code>
+                      {deletedBranch || cleanup?.branch || detail.branch}
+                    </code>{" "}
+                    has been deleted on GitHub.
+                  </p>
+                ) : (
+                  <>
+                    <p>
+                      The pull request is merged. Its description and changed
+                      files remain available here.
+                    </p>
+                    {cleanup?.reason && (
+                      <p className="pr-check-warning">{cleanup.reason}</p>
+                    )}
+                  </>
+                )}
+              </div>
+              {cleanup?.canDelete && !branchDeleted && (
                 <div
-                  className="pr-merge-confirm pr-delete-confirm"
+                  className="pr-merge-confirm pr-delete-confirm pr-action-panel"
                   role="region"
                   aria-label="Confirm branch deletion"
+                  aria-hidden={!confirmingDelete}
+                  inert={!confirmingDelete}
                 >
                   <h3>
                     Delete branch <code>{cleanup.branch}</code>?
@@ -558,20 +603,10 @@ export function PullRequestDetails({
                     request, and the merged changes remain.
                   </p>
                 </div>
-              ) : (
-                <>
-                  <p>
-                    The pull request is merged. Its description and changed
-                    files remain available here.
-                  </p>
-                  {cleanup?.reason && (
-                    <p className="pr-check-warning">{cleanup.reason}</p>
-                  )}
-                </>
               )}
             </div>
           )}
-          <div className="pr-detail-actions modal-actions">
+          <div ref={actionsRef} className="pr-detail-actions modal-actions">
             <button
               className="button pr-external"
               disabled={Boolean(saving)}
@@ -585,7 +620,10 @@ export function PullRequestDetails({
                   <button
                     className="button"
                     disabled={Boolean(saving)}
-                    onClick={() => setConfirming(false)}
+                    onClick={() => {
+                      preserveActionPosition();
+                      setConfirming(false);
+                    }}
                   >
                     Back
                   </button>
@@ -606,7 +644,10 @@ export function PullRequestDetails({
                     !detail.canMerge ||
                     !detail.mergeMethods.includes(method)
                   }
-                  onClick={() => setConfirming(true)}
+                  onClick={() => {
+                    preserveActionPosition();
+                    setConfirming(true);
+                  }}
                 >
                   <GitMergeIcon size={14} /> Merge pull request
                 </button>
@@ -619,7 +660,10 @@ export function PullRequestDetails({
                   <button
                     className="button"
                     disabled={Boolean(saving)}
-                    onClick={() => setConfirmingDelete(false)}
+                    onClick={() => {
+                      preserveActionPosition();
+                      setConfirmingDelete(false);
+                    }}
                   >
                     Cancel
                   </button>
@@ -636,7 +680,10 @@ export function PullRequestDetails({
                 <button
                   className="button"
                   disabled={blocked}
-                  onClick={() => setConfirmingDelete(true)}
+                  onClick={() => {
+                    preserveActionPosition();
+                    setConfirmingDelete(true);
+                  }}
                 >
                   <GitBranchIcon size={14} /> Delete branch
                 </button>

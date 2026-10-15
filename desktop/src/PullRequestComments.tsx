@@ -451,6 +451,7 @@ function CommentsPanel({
           </button>
         </div>
         <div
+          className="pr-comment-editor-panel"
           role="tabpanel"
           id={`pr-comment-write-${number}`}
           aria-labelledby={`pr-comment-write-tab-${number}`}
@@ -468,7 +469,7 @@ function CommentsPanel({
           />
         </div>
         <div
-          className="pr-comment-preview markdown"
+          className="pr-comment-editor-panel pr-comment-preview markdown"
           role="tabpanel"
           id={`pr-comment-preview-${number}`}
           aria-labelledby={`pr-comment-preview-tab-${number}`}
@@ -483,28 +484,31 @@ function CommentsPanel({
         <p className="pr-comment-help" id={`pr-comment-help-${number}`}>
           Markdown supported. Posts a general comment on GitHub.
         </p>
-        {thread && !thread.canComment && (
-          <p className="pr-comments-message">
-            {thread.commentBlockReason ||
-              "Commenting is unavailable for this pull request."}
-          </p>
-        )}
-        {postError && (
-          <div className="pr-comments-message" role="alert">
-            {postError}
-          </div>
-        )}
-        {needsRecheck && !postError && (
-          <div className="pr-comments-message" role="alert">
-            A previous comment could not be confirmed. Refresh comments and
-            check whether it was posted before trying again.
-          </div>
-        )}
-        {notice && (
-          <p className="pr-comment-notice" role="status">
-            {notice}
-          </p>
-        )}
+        {/* Keep status space mounted so post outcomes do not move the editor or actions. */}
+        <div className="pr-comment-status">
+          {thread && !thread.canComment && (
+            <p className="pr-comments-message">
+              {thread.commentBlockReason ||
+                "Commenting is unavailable for this pull request."}
+            </p>
+          )}
+          {postError && (
+            <div className="pr-comments-message" role="alert">
+              {postError}
+            </div>
+          )}
+          {needsRecheck && !postError && (
+            <div className="pr-comments-message" role="alert">
+              A previous comment could not be confirmed. Refresh comments and
+              check whether it was posted before trying again.
+            </div>
+          )}
+          {notice && (
+            <p className="pr-comment-notice" role="status">
+              {notice}
+            </p>
+          )}
+        </div>
         <div className="pr-comment-composer-actions">
           <small>
             {draft.length.toLocaleString()} /{" "}

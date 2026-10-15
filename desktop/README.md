@@ -13,6 +13,7 @@ Think of the interface as the dashboard of a car. It already has buttons, screen
 - **Projects:** add a project, optionally attach a GitHub repository and a local folder, expand its conversations, and remove it from the sidebar. Removing a project keeps its conversations in Sessions and leaves your files alone.
 - **Sessions:** create a conversation, select Claude, OpenAI / Codex, or Grok, see that provider’s icon, stop the practice reply, reopen conversations, and delete them from either sidebar location. Use **Undo** in the deletion notification to restore a conversation you just removed.
 - **Running indicator:** a gray shimmer moves across a running conversation’s title. Reduced-motion preferences are respected.
+- **Review readability:** consistent rounded panels and native system typography, clearer text contrast, and brighter green/red code diffs. Merge/delete confirmation panels reserve their space, and the comment editor keeps the same height between writing, previewing, and status updates. Normal scrolling stays available.
 - **IDE:** in the desktop window, choose a project folder and open it in an installed editor. On macOS, Cursor is tried before VS Code; otherwise the folder opens using the system default.
 
 **Chat is clearly marked Practice mode.** It saves your message and shows a fixed example reply. It does not call any AI provider, spend model credits, or run your Python code. The Agents screen is a placeholder for the next design step.
