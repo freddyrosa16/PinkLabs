@@ -6,6 +6,9 @@ import {
   createPullRequest,
   getPullRequest,
   mergePullRequest,
+  listPullRequests,
+  getPullRequestFiles,
+  deletePullRequestBranch,
 } from "./github.mjs";
 import {
   isAllowedAPIRequest,
@@ -14,6 +17,9 @@ import {
   validatePullRequestInput,
   validatePullRequestNumber,
   validateMergeInput,
+  validateCommitSHA,
+  validatePullRequestState,
+  validateDeleteBranchInput,
 } from "./validation.mjs";
 
 const MAX_JSON_BYTES = 256 * 1024;
@@ -92,6 +98,9 @@ export function createApiMiddleware(
     createPullRequest,
     getPullRequest,
     mergePullRequest,
+    listPullRequests,
+    getPullRequestFiles,
+    deletePullRequestBranch,
   },
 ) {
   return async function pinkApi(request, response, next) {
@@ -114,7 +123,9 @@ export function createApiMiddleware(
       url.pathname === "/api/pulls" && request.method === "POST";
     const mergingPull =
       url.pathname === "/api/merge" && request.method === "POST";
-    const writingPull = creatingPull || mergingPull;
+    const deletingBranch =
+      url.pathname === "/api/delete-pull-branch" && request.method === "POST";
+    const writingPull = creatingPull || mergingPull || deletingBranch;
     if (request.method !== "GET" && !writingPull)
       return send(405, { error: "This action is not supported." });
     if (
@@ -149,6 +160,17 @@ export function createApiMiddleware(
             ),
           );
         }
+        if (deletingBranch) {
+          const { number, ...branchFields } = fields;
+          return send(
+            200,
+            await services.deletePullRequestBranch(
+              fullName,
+              validatePullRequestNumber(number),
+              validateDeleteBranchInput(branchFields),
+            ),
+          );
+        }
         return send(
           200,
           await services.createPullRequest(
@@ -169,7 +191,13 @@ export function createApiMiddleware(
       if (url.pathname === "/api/repositories")
         return send(200, await services.listRepositories());
       if (
-        ["/api/branches", "/api/compare", "/api/pull"].includes(url.pathname)
+        [
+          "/api/branches",
+          "/api/compare",
+          "/api/pull",
+          "/api/pulls",
+          "/api/pull-files",
+        ].includes(url.pathname)
       ) {
         let repo;
         try {
@@ -179,10 +207,27 @@ export function createApiMiddleware(
         }
         if (url.pathname === "/api/branches")
           return send(200, await services.listBranches(repo));
-        if (url.pathname === "/api/pull") {
+        if (url.pathname === "/api/pulls")
+          return send(
+            200,
+            await services.listPullRequests(
+              repo,
+              validatePullRequestState(url.searchParams.get("state") ?? "all"),
+            ),
+          );
+        if (["/api/pull", "/api/pull-files"].includes(url.pathname)) {
           const number = url.searchParams.get("number");
           if (!/^[1-9]\d*$/.test(number || ""))
             throw badRequest("Choose a valid pull request number.");
+          if (url.pathname === "/api/pull-files")
+            return send(
+              200,
+              await services.getPullRequestFiles(
+                repo,
+                validatePullRequestNumber(Number(number)),
+                validateCommitSHA(url.searchParams.get("sha")),
+              ),
+            );
           return send(
             200,
             await services.getPullRequest(

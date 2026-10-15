@@ -43,8 +43,22 @@ test("the isolated preload forwards PR review and merge through named IPC method
     merged: true,
     sha: "a".repeat(40),
   });
+  await bridge.listPullRequests("owner/repo", "closed");
+  await bridge.getPullRequestFiles("owner/repo", 17, input.sha);
+  await bridge.deletePullRequestBranch("owner/repo", 17, {
+    branch: "codex/feature",
+    sha: input.sha,
+  });
   assert.deepEqual(calls, [
     ["pink:pull-request", "owner/repo", 17],
     ["pink:merge-pull-request", "owner/repo", 17, input],
+    ["pink:list-pull-requests", "owner/repo", "closed"],
+    ["pink:pull-request-files", "owner/repo", 17, input.sha],
+    [
+      "pink:delete-pull-branch",
+      "owner/repo",
+      17,
+      { branch: "codex/feature", sha: input.sha },
+    ],
   ]);
 });

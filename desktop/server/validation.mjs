@@ -134,6 +134,26 @@ export function validateMergeInput(value) {
   };
 }
 
+export function validateCommitSHA(value) {
+  if (typeof value !== "string" || !/^[a-f\d]{40}$/i.test(value))
+    throw inputError("Refresh this pull request to get its latest commit.");
+  return value.toLowerCase();
+}
+
+export function validatePullRequestState(value = "all") {
+  if (!["all", "open", "closed"].includes(value))
+    throw inputError("Choose all, open, or closed pull requests.");
+  return value;
+}
+
+export function validateDeleteBranchInput(value) {
+  const input = inputObject(value, ["branch", "sha"]);
+  return {
+    branch: validateBranchName(input.branch),
+    sha: validateCommitSHA(input.sha),
+  };
+}
+
 export function validateExternalURL(value) {
   if (
     typeof value !== "string" ||

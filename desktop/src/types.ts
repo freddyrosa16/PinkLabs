@@ -23,6 +23,45 @@ export interface PullRequest {
   branch: string;
 }
 export type MergeMethod = "merge" | "squash" | "rebase";
+export type PullRequestState = "open" | "closed" | "all";
+export interface PullRequestListItem extends PullRequest {
+  state: "open" | "closed";
+  merged: boolean;
+}
+export interface PullRequestList {
+  pulls: PullRequestListItem[];
+  truncated: boolean;
+}
+export interface PullRequestFile {
+  filename: string;
+  previousFilename: string | null;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch: string | null;
+  url: string;
+}
+export interface PullRequestFiles {
+  headSha: string;
+  files: PullRequestFile[];
+  truncated: boolean;
+}
+export interface BranchCleanup {
+  branch: string;
+  sha: string;
+  canDelete: boolean;
+  deleted: boolean;
+  reason: string;
+}
+export interface DeletePullRequestBranchInput {
+  branch: string;
+  sha: string;
+}
+export interface DeletePullRequestBranchResult {
+  deleted: true;
+  branch: string;
+}
 export interface PullRequestDetail extends PullRequest {
   body: string;
   state: "open" | "closed";
@@ -40,6 +79,7 @@ export interface PullRequestDetail extends PullRequest {
   deletions: number;
   changedFiles: number;
   commits: number;
+  branchCleanup: BranchCleanup;
 }
 export interface MergePullRequestInput {
   sha: string;
@@ -118,6 +158,20 @@ export interface PinkBridge {
     fullName: string,
     number: number,
   ) => Promise<PullRequestDetail>;
+  listPullRequests: (
+    fullName: string,
+    state: PullRequestState,
+  ) => Promise<PullRequestList>;
+  getPullRequestFiles: (
+    fullName: string,
+    number: number,
+    sha: string,
+  ) => Promise<PullRequestFiles>;
+  deletePullRequestBranch: (
+    fullName: string,
+    number: number,
+    input: DeletePullRequestBranchInput,
+  ) => Promise<DeletePullRequestBranchResult>;
   mergePullRequest: (
     fullName: string,
     number: number,

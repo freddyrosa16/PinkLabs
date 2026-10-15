@@ -23,7 +23,6 @@ import {
 import { api, external } from "./api";
 import { GitHubView } from "./GitHubView";
 import { PullRequestComposer } from "./PullRequestComposer";
-import { PullRequestDetails } from "./PullRequestDetails";
 import {
   newWorkspace,
   readWorkspace,
@@ -479,9 +478,26 @@ export function App() {
             loading={loading}
             error={error}
             createPull={() => repo && setComposerRepo(repo.fullName)}
-            openPull={(number) =>
-              repo && setSelectedPull({ repo: repo.fullName, number })
+            openPull={(number) => {
+              if (repo) setSelectedPull({ repo: repo.fullName, number });
+              setView("pulls");
+            }}
+            selectedPull={
+              selectedPull?.repo === repo?.fullName
+                ? (selectedPull?.number ?? null)
+                : null
             }
+            selectPull={(number) =>
+              setSelectedPull(
+                repo && number !== null
+                  ? { repo: repo.fullName, number }
+                  : null,
+              )
+            }
+            pullChanged={(message) => {
+              notify(message);
+              void refreshAfterChange();
+            }}
             tab={view === "pulls" ? "pulls" : tab}
             setTab={(t) => {
               setView("github");
@@ -668,18 +684,6 @@ export function App() {
           </>
         )}
       </main>
-      {selectedPull && repo?.fullName === selectedPull.repo && (
-        <PullRequestDetails
-          key={`${selectedPull.repo}/${selectedPull.number}`}
-          fullName={selectedPull.repo}
-          number={selectedPull.number}
-          close={() => setSelectedPull(null)}
-          merged={() => {
-            notify(`Pull request #${selectedPull.number} merged.`);
-            void refreshAfterChange();
-          }}
-        />
-      )}
       {repo && (
         <PullRequestComposer
           key={repo.fullName}
@@ -689,6 +693,7 @@ export function App() {
           close={() => setComposerRepo(null)}
           created={(pull) => {
             notify(`Pull request #${pull.number} is on GitHub.`);
+            setSelectedPull({ repo: repo.fullName, number: pull.number });
             setView("pulls");
             void refreshAfterChange();
           }}
