@@ -1482,8 +1482,9 @@ code {
   flex-shrink: 0;
 }
 .pr-state-label.merged,
+.pr-detail-meta .badge.merged,
 .pr-merged-icon {
-  color: var(--positive);
+  color: var(--merged);
 }
 .pr-list-limit {
   color: var(--muted);
