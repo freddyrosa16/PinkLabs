@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createRepositoryService } from "./repository-creation.mjs";
 import {
   validateComparisonInput,
   validatePullRequestInput,
@@ -1177,13 +1178,22 @@ export function createGitHubService({
 
     const warnings = [];
     let refreshIncomplete = false;
+    let empty = false;
     const branch = metadata.default_branch || "main";
     const fetchedAt = now();
-    async function optional(label, endpoint, fallback, missingCodes = []) {
+    async function optional(
+      label,
+      endpoint,
+      fallback,
+      missingCodes = [],
+      onMissing,
+    ) {
       try {
         return await request(endpoint);
       } catch (error) {
-        if (!missingCodes.includes(error.status)) {
+        if (missingCodes.includes(error.status)) {
+          onMissing?.(error);
+        } else {
           refreshIncomplete = true;
           warnings.push(`${label} could not be loaded from GitHub.`);
         }
@@ -1217,6 +1227,9 @@ export function createGitHubService({
         `${path}/commits?sha=${encodeURIComponent(branch)}&per_page=7`,
         [],
         [409],
+        () => {
+          empty = true;
+        },
       ),
       optional("Languages", `${path}/languages`, {}),
       optional("Contributors", `${path}/contributors?per_page=12`, [], [204]),
@@ -1334,7 +1347,8 @@ export function createGitHubService({
       url: metadata.html_url || `https://github.com/${fullName}`,
       visibility:
         metadata.visibility || (metadata.private ? "private" : "public"),
-      branch,
+      branch: empty ? "" : branch,
+      empty,
       license:
         metadata.license?.spdx_id === "NOASSERTION"
           ? "Other"
@@ -1411,3 +1425,9 @@ export const getPullRequestFiles = service.getPullRequestFiles;
 export const deletePullRequestBranch = service.deletePullRequestBranch;
 export const getPullRequestComments = service.getPullRequestComments;
 export const createPullRequestComment = service.createPullRequestComment;
+
+const repositoryCreation = createRepositoryService({ request: ghRequest });
+export const getRepositoryCreationOptions =
+  repositoryCreation.getRepositoryCreationOptions;
+export const createRepository = repositoryCreation.createRepository;
+export const checkCreatedRepository = repositoryCreation.checkCreatedRepository;

@@ -84,7 +84,16 @@ export function PullRequestWorkspace({
             </h2>
             <p>Review the changes, merge, and clean up branches here.</p>
           </div>
-          <button className="button" disabled={busy} onClick={createPull}>
+          <button
+            className="button"
+            disabled={busy || repo.empty}
+            title={
+              repo.empty
+                ? "Push your first commit and create another branch first."
+                : undefined
+            }
+            onClick={createPull}
+          >
             <PlusIcon size={13} /> New pull request
           </button>
         </div>

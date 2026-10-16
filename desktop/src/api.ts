@@ -2,6 +2,10 @@ import { webContentUrl } from "./rendering-policy";
 import type {
   Repository,
   RepoSummary,
+  RepositoryIdentity,
+  RepositoryCreationOptions,
+  CreateRepositoryInput,
+  CreateRepositoryResult,
   BranchSelection,
   BranchComparison,
   PullRequestInput,
@@ -84,6 +88,24 @@ export const api = {
     window.pink
       ? window.pink.repositories()
       : get<RepoSummary[]>("/api/repositories"),
+  repositoryCreationOptions: () =>
+    window.pink
+      ? window.pink.repositoryCreationOptions()
+      : get<RepositoryCreationOptions>("/api/repository-creation-options"),
+  createRepository: (input: CreateRepositoryInput) =>
+    window.pink
+      ? window.pink.createRepository(input)
+      : get<CreateRepositoryResult>("/api/create-repository", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+  checkCreatedRepository: (input: RepositoryIdentity) =>
+    window.pink
+      ? window.pink.checkCreatedRepository(input)
+      : get<RepoSummary | null>(
+          `/api/created-repository?${new URLSearchParams({ owner: input.owner, name: input.name })}`,
+        ),
   listBranches: (repo: string) =>
     window.pink
       ? window.pink.listBranches(repo)

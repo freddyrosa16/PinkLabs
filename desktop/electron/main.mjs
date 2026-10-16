@@ -18,6 +18,9 @@ import { createCloneHandler } from "../server/clone.mjs";
 import {
   getRepository,
   listRepositories,
+  getRepositoryCreationOptions,
+  createRepository,
+  checkCreatedRepository,
   listBranches,
   compareBranches,
   createPullRequest,
@@ -218,6 +221,11 @@ function installIPC() {
     getRepository(validateRepositoryName(repo)),
   );
   register("pink:repositories", () => listRepositories());
+  register("pink:repository-creation-options", () =>
+    getRepositoryCreationOptions(),
+  );
+  register("pink:create-repository", (input) => createRepository(input));
+  register("pink:created-repository", (input) => checkCreatedRepository(input));
   register("pink:list-branches", (repo) =>
     listBranches(validateRepositoryName(repo)),
   );

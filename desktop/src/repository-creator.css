@@ -1,0 +1,269 @@
+.repository-creator {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+.repository-creator[hidden] {
+  display: none;
+}
+.repository-creator-scroll {
+  overflow: auto;
+  flex: 1;
+  overscroll-behavior: contain;
+}
+.repository-creator-form {
+  width: min(720px, calc(100% - 64px));
+  margin: 38px auto 48px;
+}
+.repository-creator-intro {
+  margin-bottom: 28px;
+}
+.repository-creator-intro > svg {
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.repository-creator h1 {
+  font-size: 26px;
+  font-weight: 550;
+  letter-spacing: -0.7px;
+  margin: 0 0 8px;
+  outline: none;
+}
+.repository-creator-intro p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+.repository-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 22px;
+}
+.repository-fields > legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.repository-creator-card {
+  padding: 23px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+}
+.repository-creator h2,
+.repository-visibility legend {
+  font-size: 14px;
+  font-weight: 550;
+  margin: 0 0 18px;
+  color: var(--text);
+}
+.repository-fields label {
+  font-size: 13px;
+  font-weight: 450;
+  color: var(--text-secondary);
+}
+.repository-fields label > input:not([type="checkbox"]):not([type="radio"]),
+.repository-fields select {
+  display: block;
+  width: 100%;
+  background: var(--canvas);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  border-radius: var(--radius-control);
+  font: inherit;
+  padding: 10px 11px;
+  margin-top: 8px;
+  min-width: 0;
+}
+.repository-fields input::placeholder {
+  color: var(--faint);
+}
+.repository-fields :is(input, select):focus-visible {
+  outline: 2px solid var(--text-secondary);
+  outline-offset: 2px;
+}
+.repository-fields :is(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--text);
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.repository-fields:disabled {
+  opacity: 0.65;
+}
+.repository-name-fields {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.85fr) 12px minmax(150px, 1.2fr);
+  gap: 12px;
+}
+.repository-name-fields label {
+  min-width: 0;
+}
+.repository-name-slash {
+  padding-top: 35px;
+  text-align: center;
+  color: var(--faint);
+}
+.repository-description {
+  display: block;
+  margin-top: 20px;
+}
+.repository-description > span {
+  color: var(--faint);
+  margin-left: 5px;
+  font-size: 12px;
+}
+.repository-visibility {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+.repository-visibility legend {
+  margin-bottom: 12px;
+}
+.repository-visibility-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.repository-visibility-options label {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  cursor: pointer;
+}
+.repository-visibility-options label.selected {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+}
+.repository-fields strong {
+  display: block;
+  font-weight: 500;
+  color: var(--text);
+}
+.repository-fields small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 5px;
+  font-weight: 400;
+}
+.repository-initialize h2 {
+  margin-bottom: 5px;
+}
+.repository-initialize label {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 17px 0;
+}
+.repository-initialize label + label {
+  border-top: 1px solid var(--line);
+}
+.repository-initialize label:last-child {
+  padding-bottom: 0;
+}
+.repository-initialize .repository-template select {
+  max-width: 240px;
+  width: 42%;
+  margin-top: 0;
+}
+.repository-creator-notice {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 18px 0;
+}
+.repository-creator-notice > svg {
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.repository-creator-notice p {
+  margin: 0 0 10px;
+}
+.repository-creator-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  margin-top: 24px;
+}
+.repository-creator-footer p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.repository-creator-footer p span {
+  color: var(--faint);
+}
+.repository-creator-footer .button {
+  padding: 10px 18px;
+  flex-shrink: 0;
+}
+.repository-created {
+  line-height: 1.6;
+}
+.repository-created h2 {
+  overflow-wrap: anywhere;
+}
+.repository-created .button {
+  margin: 8px 10px 0 0;
+}
+.repo-chooser-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 20px 0 10px;
+}
+.repo-chooser-actions .chooser-heading {
+  margin: 0;
+}
+@media (max-width: 700px) {
+  .repository-creator-form {
+    width: calc(100% - 32px);
+    margin-top: 24px;
+  }
+  .repository-creator-card {
+    padding: 18px;
+  }
+  .repository-name-fields {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .repository-name-slash {
+    display: none;
+  }
+  .repository-visibility-options {
+    grid-template-columns: 1fr;
+  }
+  .repository-initialize .repository-template {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .repository-initialize .repository-template select {
+    max-width: none;
+    width: 100%;
+  }
+  .repository-creator-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+  }
+}

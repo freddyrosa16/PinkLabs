@@ -20,6 +20,7 @@ import {
   ClockIcon,
   LawIcon,
   TagIcon,
+  PlusIcon,
 } from "@primer/octicons-react";
 import { RepositoryAvatar, SafeMarkdown } from "./SafeMarkdown";
 import type { CloneMethod, Repository, Status } from "./types";
@@ -92,6 +93,7 @@ export function GitHubView({
   setTab,
   refresh,
   chooseRepo,
+  createRepo,
   createPull,
   openPull,
   selectedPull,
@@ -106,6 +108,7 @@ export function GitHubView({
   setTab: (tab: string) => void;
   refresh: () => void;
   chooseRepo: () => void;
+  createRepo: () => void;
   createPull: () => void;
   openPull: (number: number) => void;
   selectedPull: number | null;
@@ -234,6 +237,9 @@ export function GitHubView({
             <button className="button" onClick={chooseRepo}>
               Choose repository
             </button>
+            <button className="button" onClick={createRepo}>
+              <PlusIcon size={14} /> New repository
+            </button>
           </div>
         )}
         {!repo ? (
@@ -270,10 +276,12 @@ export function GitHubView({
                       {repo.languages[0].name}
                     </span>
                   )}
-                  <span>
-                    <GitBranchIcon size={13} />
-                    {repo.branch}
-                  </span>
+                  {!repo.empty && (
+                    <span>
+                      <GitBranchIcon size={13} />
+                      {repo.branch}
+                    </span>
+                  )}
                   {repo.license && (
                     <span>
                       <LawIcon size={13} />
@@ -287,6 +295,9 @@ export function GitHubView({
                 </div>
               </div>
               <div className="repo-actions">
+                <button className="button" onClick={createRepo}>
+                  <PlusIcon size={14} /> New repository
+                </button>
                 <button
                   className="split-button"
                   title="Manage your star on GitHub"
@@ -397,6 +408,12 @@ export function GitHubView({
                         </button>
                         <button
                           className="menu-action"
+                          disabled={repo.empty}
+                          title={
+                            repo.empty
+                              ? "Add a first commit before downloading a ZIP."
+                              : undefined
+                          }
                           onClick={() =>
                             external(
                               `${repo.url}/archive/refs/heads/${encodeURIComponent(repo.branch)}.zip`,
@@ -422,7 +439,9 @@ export function GitHubView({
                 onClick={() => external(`${repo.url}/actions`)}
               >
                 <span>
-                  CI on {repo.branch}, last {repo.commits.length} commits
+                  {repo.empty
+                    ? "CI · no commits yet"
+                    : `CI on ${repo.branch}, last ${repo.commits.length} commits`}
                 </span>
                 <div className="ci-line">
                   <div className="ci-bars">
@@ -521,6 +540,7 @@ export function GitHubView({
                         <span className="mono">{repo.branch}</span>
                       </h2>
                       <button
+                        disabled={repo.empty}
                         onClick={() =>
                           external(
                             `${repo.url}/commits/${encodeURIComponent(repo.branch)}`,
@@ -556,7 +576,11 @@ export function GitHubView({
                         </button>
                       ))
                     ) : (
-                      <div className="empty-row">No commits available.</div>
+                      <div className="empty-row">
+                        {repo.empty
+                          ? "This repository is empty. Clone it and push your first commit to get started."
+                          : "No commits available."}
+                      </div>
                     )}
                   </section>
                 </div>
