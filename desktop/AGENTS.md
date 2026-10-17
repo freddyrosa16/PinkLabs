@@ -47,3 +47,5 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - The message box must look the same when idle, clicked, or being typed into: no focus-driven border brightening, glow, or background highlight. Keep the text caret and keyboard focus indicators on separate controls.
 - Project and model menus open outside the entire composer, below when space permits or above when necessary. They must never cover the draft; scroll long menus within the available space and preserve the draft while selecting or dismissing them.
 - Align both menus' left edges exactly with the composer's outer left edge, not with its inset toolbar buttons. Preserve the small vertical gap and keep menus within the screen.
+
+- Create repositories inside Pink Labs from a New repository action beside repository actions and in the repository picker. Use an in-app page with owner, name, description, public/private visibility, README, .gitignore, and license options. Open the resulting repository in the GitHub view. Keep the setup neutral, preserve drafts during navigation, and never automatically retry an uncertain creation.

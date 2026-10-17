@@ -5,6 +5,12 @@ contextBridge.exposeInMainWorld(
   Object.freeze({
     repository: (fullName) => ipcRenderer.invoke("pink:repository", fullName),
     repositories: () => ipcRenderer.invoke("pink:repositories"),
+    repositoryCreationOptions: () =>
+      ipcRenderer.invoke("pink:repository-creation-options"),
+    createRepository: (input) =>
+      ipcRenderer.invoke("pink:create-repository", input),
+    checkCreatedRepository: (input) =>
+      ipcRenderer.invoke("pink:created-repository", input),
     listBranches: (fullName) =>
       ipcRenderer.invoke("pink:list-branches", fullName),
     compareBranches: (fullName, input) =>

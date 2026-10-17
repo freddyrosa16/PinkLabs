@@ -1,6 +1,9 @@
 import {
   getRepository,
   listRepositories,
+  getRepositoryCreationOptions,
+  createRepository,
+  checkCreatedRepository,
   listBranches,
   compareBranches,
   createPullRequest,
@@ -29,7 +32,7 @@ const MAX_JSON_BYTES = 256 * 1024;
 const badRequest = (message, status = 400) =>
   Object.assign(new Error(message), { status });
 
-function readJSON(request) {
+function readJSON(request, subject = "pull request") {
   // Rejected/aborted uploads can emit another stream error while being drained.
   request.on("error", () => {});
   if (
@@ -37,13 +40,13 @@ function readJSON(request) {
     "application/json"
   ) {
     return Promise.reject(
-      badRequest("Send pull request details as application/json.", 415),
+      badRequest(`Send ${subject} details as application/json.`, 415),
     );
   }
   if (Number(request.headers["content-length"]) > MAX_JSON_BYTES) {
     request.resume();
     return Promise.reject(
-      badRequest("The pull request description is too large.", 413),
+      badRequest(`The ${subject} description is too large.`, 413),
     );
   }
   return new Promise((resolve, reject) => {
@@ -65,7 +68,7 @@ function readJSON(request) {
       bytes += chunk.length;
       if (bytes > MAX_JSON_BYTES)
         return fail(
-          badRequest("The pull request description is too large.", 413),
+          badRequest(`The ${subject} description is too large.`, 413),
         );
       chunks.push(chunk);
     };
@@ -74,15 +77,15 @@ function readJSON(request) {
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
       } catch {
-        reject(badRequest("The pull request details are not valid JSON."));
+        reject(badRequest(`The ${subject} details are not valid JSON.`));
       }
     };
     const onError = () =>
-      fail(badRequest("Could not read the pull request details."));
+      fail(badRequest(`Could not read the ${subject} details.`));
     const onAborted = () =>
-      fail(badRequest("The pull request upload was interrupted."));
+      fail(badRequest(`The ${subject} upload was interrupted.`));
     const timer = setTimeout(
-      () => fail(badRequest("The pull request upload took too long.", 408)),
+      () => fail(badRequest(`The ${subject} upload took too long.`, 408)),
       10_000,
     );
     request.on("data", onData);
@@ -96,6 +99,9 @@ export function createApiMiddleware(
   services = {
     getRepository,
     listRepositories,
+    getRepositoryCreationOptions,
+    createRepository,
+    checkCreatedRepository,
     listBranches,
     compareBranches,
     createPullRequest,
@@ -139,24 +145,30 @@ export function createApiMiddleware(
       url.pathname === "/api/delete-pull-branch" && request.method === "POST";
     const commentingPull =
       url.pathname === "/api/pull-comments" && request.method === "POST";
+    const creatingRepository =
+      url.pathname === "/api/create-repository" && request.method === "POST";
     const writingPull =
       creatingPull || mergingPull || deletingBranch || commentingPull;
-    if (request.method !== "GET" && !writingPull)
+    const writing = writingPull || creatingRepository;
+    if (request.method !== "GET" && !writing)
       return send(405, { error: "This action is not supported." });
     if (
-      writingPull &&
+      writing &&
       request.headers.origin !== `http://${request.headers.host}`
     ) {
       return send(403, {
         error:
-          "Pull requests can only be changed from the local Pink Labs preview.",
+          "GitHub changes are only available from the local Pink Labs preview.",
       });
     }
     try {
-      if (writingPull) {
-        const raw = await readJSON(request);
+      if (writing) {
+        const subject = creatingRepository ? "repository" : "pull request";
+        const raw = await readJSON(request, subject);
         if (!raw || typeof raw !== "object" || Array.isArray(raw))
-          throw badRequest("Invalid pull request details.");
+          throw badRequest(`Invalid ${subject} details.`);
+        if (creatingRepository)
+          return send(200, await services.createRepository(raw));
         const { repo, ...fields } = raw;
         let fullName;
         try {
@@ -216,6 +228,16 @@ export function createApiMiddleware(
       }
       if (url.pathname === "/api/repositories")
         return send(200, await services.listRepositories());
+      if (url.pathname === "/api/repository-creation-options")
+        return send(200, await services.getRepositoryCreationOptions());
+      if (url.pathname === "/api/created-repository")
+        return send(
+          200,
+          await services.checkCreatedRepository({
+            owner: url.searchParams.get("owner"),
+            name: url.searchParams.get("name"),
+          }),
+        );
       if (
         [
           "/api/branches",

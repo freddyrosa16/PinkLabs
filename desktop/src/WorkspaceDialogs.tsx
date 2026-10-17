@@ -3,6 +3,7 @@ import {
   ChevronRightIcon,
   FileDirectoryIcon,
   MarkGithubIcon,
+  PlusIcon,
   XIcon,
 } from "@primer/octicons-react";
 import { api } from "./api";
@@ -59,9 +60,11 @@ export function ModalDialog({
 export function RepoChooser({
   current,
   select,
+  create,
 }: {
   current: string;
   select: (name: string) => void;
+  create: () => void;
 }) {
   const [name, setName] = useState(current);
   const [repos, setRepos] = useState<RepoSummary[]>([]);
@@ -123,7 +126,12 @@ export function RepoChooser({
           {error}
         </p>
       )}
-      <h3 className="chooser-heading">Your repositories</h3>
+      <div className="repo-chooser-actions">
+        <h3 className="chooser-heading">Your repositories</h3>
+        <button className="button" onClick={create}>
+          <PlusIcon size={14} /> New repository
+        </button>
+      </div>
       <div className="repo-picker-list">
         {loading ? (
           <p className="muted small">Loading repositories…</p>

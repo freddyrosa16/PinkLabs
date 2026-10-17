@@ -135,6 +135,7 @@ export interface Repository {
   url: string;
   visibility: string;
   branch: string;
+  empty: boolean;
   license: string;
   updatedAt: string;
   homepage: string;
@@ -164,10 +165,39 @@ export interface RepoSummary {
   description: string;
   private: boolean;
 }
+export interface RepositoryIdentity {
+  owner: string;
+  name: string;
+}
+export interface RepositoryCreationOptions {
+  account: string;
+  owners: { login: string; type: "user" | "organization" }[];
+  gitignoreTemplates: string[];
+  licenses: { key: string; name: string }[];
+  warnings: string[];
+}
+export interface CreateRepositoryInput extends RepositoryIdentity {
+  description: string;
+  visibility: "private" | "public";
+  initializeReadme: boolean;
+  gitignoreTemplate: string;
+  licenseTemplate: string;
+}
+export type CreateRepositoryResult =
+  | { status: "created"; repository: RepoSummary }
+  | { status: "rejected"; message: string }
+  | { status: "uncertain"; message: string };
 export type CloneMethod = "https" | "ssh" | "cli";
 export interface PinkBridge {
   repository: (fullName: string) => Promise<Repository>;
   repositories: () => Promise<RepoSummary[]>;
+  repositoryCreationOptions: () => Promise<RepositoryCreationOptions>;
+  createRepository: (
+    input: CreateRepositoryInput,
+  ) => Promise<CreateRepositoryResult>;
+  checkCreatedRepository: (
+    input: RepositoryIdentity,
+  ) => Promise<RepoSummary | null>;
   listBranches: (fullName: string) => Promise<string[]>;
   compareBranches: (
     fullName: string,

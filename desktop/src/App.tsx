@@ -18,6 +18,7 @@ import { IDEView } from "./IDEView";
 import { ModalDialog, RepoChooser, ProjectForm } from "./WorkspaceDialogs";
 import { providers, ProviderIcon } from "./providers";
 import { GitHubView } from "./GitHubView";
+import { RepositoryCreator } from "./RepositoryCreator";
 import { PullRequestComposer } from "./PullRequestComposer";
 import { removeProject, type Session } from "./store";
 import { useRepository } from "./useRepository";
@@ -35,6 +36,7 @@ export function App() {
   const { workspace, setWorkspace, storageWarning } = useWorkspace();
   const [view, setView] = useState("github");
   const [tab, setTab] = useState("overview");
+  const [repositoryCreatorOpened, setRepositoryCreatorOpened] = useState(false);
   const sidebar = useSidebar();
   const mobileMenuRef = useRef<HTMLButtonElement>(null);
   const wasMobileOpen = useRef(false);
@@ -81,6 +83,12 @@ export function App() {
   function notify(message: string) {
     setUndoSession(null);
     setToast(message);
+  }
+  function createRepository() {
+    setRepositoryCreatorOpened(true);
+    setModal(null);
+    setView("create-repository");
+    setMobileOpen(false);
   }
   useEffect(() => {
     if (!toast) return;
@@ -470,7 +478,21 @@ export function App() {
         >
           <AnimatedIcon name="sidebar-open" size={18} />
         </button>
-        {view === "github" || view === "pulls" ? (
+        {repositoryCreatorOpened && (
+          <RepositoryCreator
+            active={view === "create-repository"}
+            close={() => setView("github")}
+            notify={notify}
+            openRepository={(fullName) => {
+              setWorkspace((w) => ({ ...w, repo: fullName }));
+              setSelectedPull(null);
+              setTab("overview");
+              setView("github");
+            }}
+          />
+        )}
+        {view === "create-repository" ? null : view === "github" ||
+          view === "pulls" ? (
           <GitHubView
             repo={repo}
             loading={loading}
@@ -503,6 +525,7 @@ export function App() {
             }}
             refresh={refresh}
             chooseRepo={() => setModal({ type: "repository" })}
+            createRepo={createRepository}
             notify={notify}
           />
         ) : view === "chat" ? (
@@ -635,6 +658,7 @@ export function App() {
           {modal.type === "repository" ? (
             <RepoChooser
               current={workspace.repo}
+              create={createRepository}
               select={(name) => {
                 setWorkspace((w) => ({ ...w, repo: name }));
                 setView("github");

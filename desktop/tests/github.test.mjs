@@ -154,6 +154,30 @@ test("normalizes live endpoint shapes into the frontend contract", async () => {
   assert.equal(repo.starsThisMonth, 4);
   assert.deepEqual(repo.warnings, []);
   assert.equal(repo.refreshIncomplete, false);
+  assert.equal(repo.empty, false);
+});
+
+test("only a commits409 proves an empty repository and removes its nonexistent branch", async () => {
+  const endpoint = "repos/freddy/PinkLabs/commits?sha=main&per_page=7";
+  const empty = await service({
+    [endpoint]: Object.assign(new Error("Git Repository is empty"), {
+      status: 409,
+    }),
+  }).getRepository("freddy/PinkLabs");
+  assert.equal(empty.empty, true);
+  assert.equal(empty.branch, "");
+  assert.deepEqual(empty.commits, []);
+  assert.equal(empty.refreshIncomplete, false);
+  for (const response of [
+    [],
+    Object.assign(new Error("Could not read commits"), { status: 403 }),
+  ]) {
+    const unproven = await service({ [endpoint]: response }).getRepository(
+      "freddy/PinkLabs",
+    );
+    assert.equal(unproven.empty, false);
+    assert.equal(unproven.branch, "main");
+  }
 });
 
 test("open PR count includes loaded rows when GitHub search lags and retains larger totals", async () => {
