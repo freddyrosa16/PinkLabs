@@ -6,3 +6,4 @@ desktop/node_modules/
 desktop/dist/
 desktop/release/
 .DS_Store
+__pycache__/

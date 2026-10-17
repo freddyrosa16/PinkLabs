@@ -17,3 +17,8 @@ print(get_files_info("calculator", "/bin"), "\n")
 
 print("Result for '../' directory:")
 print(get_files_info("calculator", "../"), "\n")
+
+print(get_files_info({"directory": "."}))
+print(get_files_info({"directory": "pkg"}))
+
+print(get_files_info({"directory": "pkg"}))
